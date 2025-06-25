@@ -74,9 +74,9 @@ module load_unit
     // Transaction ID of the committing instruction - COMMIT_STAGE
     input logic [CVA6Cfg.TRANS_ID_BITS-1:0] commit_tran_id_i,
     // MPT control signals
-    input  logic mpt_valid_i,
-    input  logic mpt_allow_i,
-    output logic mpt_enable_o,
+    input  logic mptw_valid_i,
+    input  logic mptw_allow_i,
+    output logic mptw_enable_o,
     // Data cache request out - CACHES
     input dcache_req_o_t req_port_i,
     // Data cache request in - CACHES
@@ -249,7 +249,7 @@ module load_unit
     req_port_o.data_be   = lsu_ctrl_i.be;
     req_port_o.data_size = extract_transfer_size(lsu_ctrl_i.operation);
     pop_ld_o             = 1'b0;
-    mpt_enable_o = 1'b0;
+    mptw_enable_o = 1'b0;
 
     // In IDLE and SEND_TAG states, this unit can accept a new load request
     // when the load buffer is not full or if there is a response and the
@@ -260,11 +260,11 @@ module load_unit
       // Wait for MPT to give allow signal
       WAIT_MPT: begin
         translation_req_o = 1'b1;
-        mpt_enable_o = 1'b1;
-        if (mpt_valid_i) begin
-          mpt_enable_o = 1'b0;
+        mptw_enable_o = 1'b1;
+        if (mptw_valid_i) begin
+          mptw_enable_o = 1'b0;
           // only if access allowed make a dcache request else stall
-          if (mpt_allow_i) begin
+          if (mptw_allow_i) begin
             // make a load request to memory
             req_port_o.data_req = 1'b1;
             // we got no data grant so wait for the grant before sending the tag
