@@ -141,9 +141,9 @@ module load_store_unit
     output logic                                      dtlb_miss_o,
 
     // Data cache request output - CACHES
-    input  dcache_req_o_t [2:0] dcache_req_ports_i,
-    // Data cache request input - CACHES
-    output dcache_req_i_t [2:0] dcache_req_ports_o,
+    input  dcache_req_o_t [3:0] dcache_req_ports_i,  // response from D$
+    // Data cache request input - CACHES             
+    output dcache_req_i_t [3:0] dcache_req_ports_o,  // request to D$
     // TO_BE_COMPLETED - TO_BE_COMPLETED
     input  logic                dcache_wbuffer_empty_i,
     // TO_BE_COMPLETED - TO_BE_COMPLETED
@@ -242,6 +242,20 @@ module load_store_unit
   logic [CVA6Cfg.PPNW-1:0] satp_ppn[2:0];
   logic [CVA6Cfg.ASID_WIDTH-1:0] asid[2:0], asid_to_be_flushed[1:0];
   logic [CVA6Cfg.VLEN-1:0] vaddr_to_be_flushed[1:0];
+
+  // New dcache internal signals used by Load Unit, Store Unit, MPTW of the Load Unit and MPTW of the Store Unit
+  dcache_req_o_t mptw_load_dcache_req_i;             
+  dcache_req_i_t mptw_load_dcache_req_o;
+  dcache_req_o_t load_dcache_req_i;             
+  dcache_req_i_t load_dcache_req_o;
+  // Internal signals used by MPTW of the Load Unit
+  logic mptw_load_en_int, mptw_load_allow_int, mptw_load_valid_int, mptw_load_busy_int, load_access_page_fault_int;
+  logic [2:0] load_format_error_int;
+  logic [72:0] plb_entry_load_int;
+  // Internal signals used by MPTW of the Store Unit
+  logic mptw_store_en_int, mptw_store_allow_int, mptw_store_valid_int, mptw_store_busy_int, store_access_page_fault_int;
+  logic [2:0] store_format_error_int;
+  logic [72:0] plb_entry_store_int;
 
   // -------------------
   // MMU e.g.: TLBs/PTW
@@ -362,36 +376,6 @@ module load_store_unit
     assign dtlb_hit                            = 1'b1;
 
   end
-
-  // ------------------
-  // PMP
-  // ------------------
-
-  pmp_data_if #(
-      .CVA6Cfg      (CVA6Cfg),
-      .icache_areq_t(icache_areq_t),
-      .exception_t  (exception_t)
-  ) i_pmp_data_if (
-      .clk_i               (clk_i),
-      .rst_ni              (rst_ni),
-      .icache_areq_i       (pmp_icache_areq_i),
-      .icache_areq_o       (icache_areq_o),
-      .icache_fetch_vaddr_i(icache_areq_i.fetch_vaddr),
-      .lsu_valid_i         (pmp_translation_valid),
-      .lsu_paddr_i         (lsu_paddr),
-      .lsu_vaddr_i         (mmu_vaddr),
-      .lsu_exception_i     (pmp_exception),
-      .lsu_is_store_i      (st_translation_req),
-      .lsu_valid_o         (translation_valid),
-      .lsu_paddr_o         (mmu_paddr),
-      .lsu_exception_o     (mmu_exception),
-      .priv_lvl_i          (priv_lvl_i),
-      .v_i                 (v_i),
-      .ld_st_priv_lvl_i    (ld_st_priv_lvl_i),
-      .ld_st_v_i           (ld_st_v_i),
-      .pmpcfg_i            (pmpcfg_i),
-      .pmpaddr_i           (pmpaddr_i)
-  );
 
   // ------------------
   // External MMU port
@@ -541,6 +525,10 @@ module load_store_unit
       // AMOs
       .amo_req_o,
       .amo_resp_i,
+      // MPTW 
+      .mptw_valid_i          (mptw_store_valid_int),
+      .mptw_allow_i          (mptw_store_allow_int),
+      .mptw_enable_o         (mptw_store_en_int   ),
       // to memory arbiter
       .req_port_i           (dcache_req_ports_i[2]),
       .req_port_o           (dcache_req_ports_o[2])
@@ -582,10 +570,89 @@ module load_store_unit
       .page_offset_matches_i(page_offset_matches),
       .store_buffer_empty_i (store_buffer_empty),
       .commit_tran_id_i,
+      // MPTW 
+      .mptw_valid_i        (mptw_load_valid_int),
+      .mptw_allow_i        (mptw_load_allow_int),
+      .mptw_enable_o       (mptw_load_en_int),
       // to memory arbiter
-      .req_port_i           (dcache_req_ports_i[1]),
-      .req_port_o           (dcache_req_ports_o[1]),
+      .req_port_i           (load_dcache_req_i),
+      .req_port_o           (load_dcache_req_o),
       .dcache_wbuffer_not_ni_i
+  );
+
+  // Selects the source of D$ port 1 requests: either the MPTW of the Load Unit,
+  // depending on whether the MPTW is currently handling a request.
+  always_comb begin : mux_mptw_load_req
+    dcache_req_ports_o[1] = '{default: '0};
+    mptw_load_dcache_req_i = '{default: '0};
+    load_dcache_req_i     = '{default: '0};
+
+    if (mptw_load_en_int) begin
+      mptw_load_dcache_req_i = dcache_req_ports_i[1];
+      dcache_req_ports_o[1] = mptw_load_dcache_req_o;
+    end else begin
+      
+      load_dcache_req_i = dcache_req_ports_i[1];
+      dcache_req_ports_o[1] = load_dcache_req_o;
+     end
+  end
+
+  // -----------------
+  // MPU unit containing PMP, MPTWs and MEM_to_DCACHE protocol converters
+  // -----------------
+  mpu_data_if #(
+    .CVA6Cfg              (CVA6Cfg),
+    .icache_areq_t        (icache_areq_t),
+    .exception_t          (exception_t),
+    .dcache_req_i_t       (dcache_req_i_t),
+    .dcache_req_o_t       (dcache_req_o_t)
+  ) i_mpu_data_if (
+    .clk_i               (clk_i),
+    .rst_ni              (rst_ni),
+    // PMP
+    .icache_areq_i       (pmp_icache_areq_i),
+    .icache_areq_o       (icache_areq_o),
+    .icache_fetch_vaddr_i(icache_areq_i.fetch_vaddr),
+    .lsu_valid_i         (pmp_translation_valid),
+    .lsu_paddr_i         (lsu_paddr),
+    .lsu_vaddr_i         (mmu_vaddr),
+    .lsu_exception_i     (pmp_exception),
+    .lsu_is_store_i      (st_translation_req),
+    .lsu_valid_o         (translation_valid),
+    .lsu_paddr_o         (mmu_paddr),
+    .lsu_exception_o     (mmu_exception),
+    .priv_lvl_i          (priv_lvl_i),
+    .v_i                 (v_i),
+    .ld_st_priv_lvl_i    (ld_st_priv_lvl_i),
+    .ld_st_v_i           (ld_st_v_i),
+    .pmpcfg_i            (pmpcfg_i),
+    .pmpaddr_i           (pmpaddr_i),
+    // MPTW of the Store Unit
+    .flush_i                   (flush_i),
+    .ptw_store_enable_i        (mptw_store_en_int),
+    .spa_i                     (cva6_mmu_paddr),
+    .addr_store_valid_i        (mptw_store_en_int),
+    .mmpt_store_reg_i          (64'h3300_0000_0000_0001),
+    .store_access_page_fault_o (store_access_page_fault_int),
+    .store_format_error_o      (store_format_error_int),
+    .ptw_store_busy_o          (mptw_store_busy_int),
+    .ptw_store_valid_o         (mptw_store_valid_int),
+    .plb_entry_store_o         (plb_entry_store_int),
+    .allow_store_o             (mptw_store_allow_int),
+    // MPTW of the Load Unit
+    .ptw_load_enable_i         (mptw_load_en_int),
+    .addr_load_valid_i         (mptw_load_en_int),
+    .mmpt_load_reg_i           (64'h3300_0000_0000_0001),
+    .load_access_page_fault_o  (load_access_page_fault_int),
+    .load_format_error_o       (load_format_error_int),
+    .ptw_load_busy_o           (mptw_load_busy_int),                   
+    .ptw_load_valid_o          (mptw_load_valid_int),                  
+    .plb_entry_load_o          (plb_entry_load_int),            
+    .allow_load_o              (mptw_load_allow_int),
+    .req_port_i_mptw_load       (mptw_load_dcache_req_i),
+    .req_port_o_mptw_load       (mptw_load_dcache_req_o),
+    .req_port_i_mptw_store      (dcache_req_ports_i[3]),
+    .req_port_o_mptw_store      (dcache_req_ports_o[3])
   );
 
   // ----------------------------

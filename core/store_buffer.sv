@@ -46,6 +46,11 @@ module store_buffer
     input logic [(CVA6Cfg.XLEN/8)-1:0] be_i,  // byte enable in
     input logic [1:0] data_size_i,  // type of request we are making (e.g.: bytes to write)
 
+    // MPT control signals
+    input logic mptw_valid_i,
+    input logic mptw_allow_i,
+    output logic mptw_enable_o,
+    
     // D$ interface
     input  dcache_req_o_t req_port_i,
     output dcache_req_i_t req_port_o
@@ -166,18 +171,27 @@ module store_buffer
     commit_queue_n         = commit_queue_q;
 
     req_port_o.data_req    = 1'b0;
+    mptw_enable_o = 1'b0;
 
     // there should be no commit when we are flushing
     // if the entry in the commit queue is valid and not speculative anymore we can issue this instruction
     if (commit_queue_q[commit_read_pointer_q].valid && !stall_st_pending_i) begin
-      req_port_o.data_req = 1'b1;
-      if (req_port_i.data_gnt) begin
-        // we can evict it from the commit buffer
-        commit_queue_n[commit_read_pointer_q].valid = 1'b0;
-        // advance the read_pointer
-        commit_read_pointer_n = commit_read_pointer_q + 1'b1;
-        commit_status_cnt--;
-      end
+      // Now we can enable MPT and wait for allow signal before making a dcache request by the store unit
+      mptw_enable_o = 1'b1;
+      if (mptw_valid_i) begin
+          mptw_enable_o = 1'b0;
+          // if access allowed send tag to dcache else stall
+          if (mptw_allow_i) begin
+              req_port_o.data_req = 1'b1;
+              if (req_port_i.data_gnt) begin
+                // we can evict it from the commit buffer
+                commit_queue_n[commit_read_pointer_q].valid = 1'b0;
+                // advance the read_pointer
+                commit_read_pointer_n = commit_read_pointer_q + 1'b1;
+                commit_status_cnt--;
+              end
+          end
+        end
     end
     // we ignore the rvalid signal for now as we assume that the store
     // happened if we got a grant
@@ -288,6 +302,3 @@ module store_buffer
   else $error("[Commit Queue] You are trying to commit a store although the buffer is full");
   //pragma translate_on
 endmodule
-
-
-
