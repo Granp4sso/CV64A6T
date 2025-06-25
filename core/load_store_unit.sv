@@ -243,17 +243,17 @@ module load_store_unit
   logic [CVA6Cfg.ASID_WIDTH-1:0] asid[2:0], asid_to_be_flushed[1:0];
   logic [CVA6Cfg.VLEN-1:0] vaddr_to_be_flushed[1:0];
 
-  // New dcache internal signals used by load unit, store unit, mpt_load and mpt_store
-  dcache_req_o_t mpt_load_dcache_req_i;             
-  dcache_req_i_t mpt_load_dcache_req_o;
+  // New dcache internal signals used by Load Unit, Store Unit, MPTW of the Load Unit and MPTW of the Store Unit
+  dcache_req_o_t mptw_load_dcache_req_i;             
+  dcache_req_i_t mptw_load_dcache_req_o;
   dcache_req_o_t load_dcache_req_i;             
   dcache_req_i_t load_dcache_req_o;
-  // Internal signals used by mpt_load
-  logic mpt_load_en_int, mpt_load_allow_int, mpt_load_valid_int, mpt_load_busy_int, load_access_page_fault_int;
+  // Internal signals used by MPTW of the Load Unit
+  logic mptw_load_en_int, mptw_load_allow_int, mptw_load_valid_int, mptw_load_busy_int, load_access_page_fault_int;
   logic [2:0] load_format_error_int;
   logic [72:0] plb_entry_load_int;
-  // Internal signals used by mpt_store
-  logic mpt_store_en_int, mpt_store_allow_int, mpt_store_valid_int, mpt_store_busy_int, store_access_page_fault_int;
+  // Internal signals used by MPTW of the Store Unit
+  logic mptw_store_en_int, mptw_store_allow_int, mptw_store_valid_int, mptw_store_busy_int, store_access_page_fault_int;
   logic [2:0] store_format_error_int;
   logic [72:0] plb_entry_store_int;
 
@@ -525,10 +525,10 @@ module load_store_unit
       // AMOs
       .amo_req_o,
       .amo_resp_i,
-      // MPT 
-      .mpt_valid_i          (mpt_store_valid_int),
-      .mpt_allow_i          (mpt_store_allow_int),
-      .mpt_enable_o         (mpt_store_en_int   ),
+      // MPTW 
+      .mptw_valid_i          (mptw_store_valid_int),
+      .mptw_allow_i          (mptw_store_allow_int),
+      .mptw_enable_o         (mptw_store_en_int   ),
       // to memory arbiter
       .req_port_i           (dcache_req_ports_i[2]),
       .req_port_o           (dcache_req_ports_o[2])
@@ -570,26 +570,26 @@ module load_store_unit
       .page_offset_matches_i(page_offset_matches),
       .store_buffer_empty_i (store_buffer_empty),
       .commit_tran_id_i,
-      // MPT 
-      .mpt_valid_i        (mpt_load_valid_int),
-      .mpt_allow_i        (mpt_load_allow_int),
-      .mpt_enable_o       (mpt_load_en_int),
+      // MPTW 
+      .mptw_valid_i        (mptw_load_valid_int),
+      .mptw_allow_i        (mptw_load_allow_int),
+      .mptw_enable_o       (mptw_load_en_int),
       // to memory arbiter
       .req_port_i           (load_dcache_req_i),
       .req_port_o           (load_dcache_req_o),
       .dcache_wbuffer_not_ni_i
   );
 
-  // Selects the source of D$ port 1 requests: either the MPT module or the load unit,
-  // depending on whether the MPT is currently handling a request.
-  always_comb begin : mux_mpt_load_req
+  // Selects the source of D$ port 1 requests: either the MPTW of the Load Unit,
+  // depending on whether the MPTW is currently handling a request.
+  always_comb begin : mux_mptw_load_req
     dcache_req_ports_o[1] = '{default: '0};
-    mpt_load_dcache_req_i = '{default: '0};
+    mptw_load_dcache_req_i = '{default: '0};
     load_dcache_req_i     = '{default: '0};
 
-    if (mpt_load_en_int) begin
-      mpt_load_dcache_req_i = dcache_req_ports_i[1];
-      dcache_req_ports_o[1] = mpt_load_dcache_req_o;
+    if (mptw_load_en_int) begin
+      mptw_load_dcache_req_i = dcache_req_ports_i[1];
+      dcache_req_ports_o[1] = mptw_load_dcache_req_o;
     end else begin
       
       load_dcache_req_i = dcache_req_ports_i[1];
@@ -598,7 +598,7 @@ module load_store_unit
   end
 
   // -----------------
-  // MPU unit conteining PMP, MPT and MEM_to_DCACHE protocol converter
+  // MPU unit containing PMP, MPTWs and MEM_to_DCACHE protocol converters
   // -----------------
   mpu_data_if #(
     .CVA6Cfg              (CVA6Cfg),
@@ -627,32 +627,32 @@ module load_store_unit
     .ld_st_v_i           (ld_st_v_i),
     .pmpcfg_i            (pmpcfg_i),
     .pmpaddr_i           (pmpaddr_i),
-    // MPT signals used by store unit
+    // MPTW of the Store Unit
     .flush_i                   (flush_i),
-    .ptw_store_enable_i        (mpt_store_en_int),
+    .ptw_store_enable_i        (mptw_store_en_int),
     .spa_i                     (cva6_mmu_paddr),
-    .addr_store_valid_i        (mpt_store_en_int),
+    .addr_store_valid_i        (mptw_store_en_int),
     .mmpt_store_reg_i          (64'h3300_0000_0000_0001),
     .store_access_page_fault_o (store_access_page_fault_int),
     .store_format_error_o      (store_format_error_int),
-    .ptw_store_busy_o          (mpt_store_busy_int),
-    .ptw_store_valid_o         (mpt_store_valid_int),
+    .ptw_store_busy_o          (mptw_store_busy_int),
+    .ptw_store_valid_o         (mptw_store_valid_int),
     .plb_entry_store_o         (plb_entry_store_int),
-    .allow_store_o             (mpt_store_allow_int),
-    // MPT signals used by load unit
-    .ptw_load_enable_i         (mpt_load_en_int),
-    .addr_load_valid_i         (mpt_load_en_int),
+    .allow_store_o             (mptw_store_allow_int),
+    // MPTW of the Load Unit
+    .ptw_load_enable_i         (mptw_load_en_int),
+    .addr_load_valid_i         (mptw_load_en_int),
     .mmpt_load_reg_i           (64'h3300_0000_0000_0001),
     .load_access_page_fault_o  (load_access_page_fault_int),
     .load_format_error_o       (load_format_error_int),
-    .ptw_load_busy_o           (mpt_load_busy_int),                   
-    .ptw_load_valid_o          (mpt_load_valid_int),                  
+    .ptw_load_busy_o           (mptw_load_busy_int),                   
+    .ptw_load_valid_o          (mptw_load_valid_int),                  
     .plb_entry_load_o          (plb_entry_load_int),            
-    .allow_load_o              (mpt_load_allow_int),
-    .req_port_i_mpt_load       (mpt_load_dcache_req_i),
-    .req_port_o_mpt_load       (mpt_load_dcache_req_o),
-    .req_port_i_mpt_store      (dcache_req_ports_i[3]),
-    .req_port_o_mpt_store      (dcache_req_ports_o[3])
+    .allow_load_o              (mptw_load_allow_int),
+    .req_port_i_mptw_load       (mptw_load_dcache_req_i),
+    .req_port_o_mptw_load       (mptw_load_dcache_req_o),
+    .req_port_i_mptw_store      (dcache_req_ports_i[3]),
+    .req_port_o_mptw_store      (dcache_req_ports_o[3])
   );
 
   // ----------------------------

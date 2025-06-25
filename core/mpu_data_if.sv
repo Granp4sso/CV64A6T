@@ -39,7 +39,7 @@ module mpu_data_if
         input riscv::pmpcfg_t [avoid_neg(CVA6Cfg.NrPMPEntries-1):0] pmpcfg_i,
         input logic [avoid_neg(CVA6Cfg.NrPMPEntries-1):0][CVA6Cfg.PLEN-3:0] pmpaddr_i,
 
-        // mpt_store signals
+        // MPTW of the Store Unit
         input logic flush_i,
         input logic ptw_store_enable_i,                  
         input spa_t_u spa_i,                       
@@ -52,7 +52,7 @@ module mpu_data_if
         output plb_entry_t plb_entry_store_o,            
         output logic allow_store_o,
 
-        // mpt_load signals
+        // MPTW of the Load Unit
         input logic ptw_load_enable_i, 
         input logic addr_load_valid_i,      
         input mmpt_reg_t mmpt_load_reg_i,
@@ -63,24 +63,24 @@ module mpu_data_if
         output plb_entry_t plb_entry_load_o,            
         output logic allow_load_o,
 
-        // Data cache request out - CACHES from mpt_load
-        input dcache_req_o_t req_port_i_mpt_load,
-        // Data cache request in - CACHES mpt_load
-        output dcache_req_i_t req_port_o_mpt_load,
-        // Data cache request out - CACHES from mpt_store
-        input dcache_req_o_t req_port_i_mpt_store,
-        // Data cache request in - CACHES mpt_store
-        output dcache_req_i_t req_port_o_mpt_store   
+        // Data cache request out - CACHES from MPTW LOAD UNIT
+        input dcache_req_o_t req_port_i_mptw_load,
+        // Data cache request in - CACHES MPTW LOAD UNIT
+        output dcache_req_i_t req_port_o_mptw_load,
+        // Data cache request out - CACHES from MPTW STORE UNIT
+        input dcache_req_o_t req_port_i_mptw_store,
+        // Data cache request in - CACHES MPTW STORE UNIT
+        output dcache_req_i_t req_port_o_mptw_store   
     );
 
-    `DECLARE_MEM_BUS(m_load, 64);
-    `DECLARE_MEM_BUS(m_store, 64);
-
+    `DECLARE_MEM_BUS(m_load,CVA6Cfg.CVA6ConfigXlen);
+    `DECLARE_MEM_BUS(m_store, CVA6Cfg.CVA6ConfigXlen);
+    
     // ------------------
     // MPT used by LOAD unit
     // ------------------ 
     mpt_top # (
-    ) i_mpt_load (
+    ) i_mptw_load (
         .clk_i,
         .rst_ni,
         .flush_i,
@@ -107,7 +107,7 @@ module mpu_data_if
     );
 
     // ------------------
-    // MEM to DCACHE protocol converter for mpt_load
+    // MEM to DCACHE protocol converter for MPTW of the Load Unit
     // ------------------    
     mem_to_dcache_converter #(
         .CVA6Cfg                (CVA6Cfg),
@@ -125,15 +125,15 @@ module mpu_data_if
         .s_mem_we               (m_load_mem_we),
         .s_mem_be               (m_load_mem_be),
         .s_mem_error            (m_load_mem_error),
-        .req_port_i             (req_port_i_mpt_load),
-        .req_port_o             (req_port_o_mpt_load)
+        .req_port_i             (req_port_i_mptw_load),
+        .req_port_o             (req_port_o_mptw_load)
     );
 
     // ------------------
     // MPT used by STORE unit
     // ------------------
     mpt_top # (
-    ) i_mpt_store (
+    ) i_mptw_store (
         .clk_i,
         .rst_ni,
         .flush_i,
@@ -160,7 +160,7 @@ module mpu_data_if
     );
 
     // ------------------
-    // MEM to DCACHE protocol converter for mpt_store
+    // MEM to DCACHE protocol converter for MPTW of the Store Unit
     // ------------------
     mem_to_dcache_converter #(
         .CVA6Cfg                (CVA6Cfg),
@@ -178,8 +178,8 @@ module mpu_data_if
         .s_mem_we               (m_store_mem_we),
         .s_mem_be               (m_store_mem_be),
         .s_mem_error            (m_store_mem_error),
-        .req_port_i             (req_port_i_mpt_store),
-        .req_port_o             (req_port_o_mpt_store)
+        .req_port_i             (req_port_i_mptw_store),
+        .req_port_o             (req_port_o_mptw_store)
     );
 
     // ------------------

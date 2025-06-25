@@ -1,7 +1,14 @@
 // Author: Valerio Di Domenico <didomenico.valerio@virgilio.it>
 
 // Description:
-// This module implements a memory protocol converter from MEM protocol (used by MPT) to DCACHE protocol
+// This module implements a protocol converter between MEM protocol and DCACHE protocol.
+//
+// The conversion logic operates in two steps:
+//   1. It captures a MEM request (`s_mem_req`) and, once a data grant is received
+//      from the DCACHE interface (`req_port_i.data_gnt`), transitions to a state
+//      where it sends the corresponding cache tag.
+//   2. In the following cycle, it asserts `tag_valid` to complete the request,
+//      effectively mimicking the handshaking expected by the DCACHE interface.
 
 // Import headers
 `include "uninasoc_mem.svh" 
@@ -32,8 +39,8 @@ module mem_to_dcache_converter
         req_port_o.data_req       = s_mem_req;
         s_mem_gnt                 = req_port_i.data_gnt;
         s_mem_valid               = req_port_i.data_rvalid;
-        req_port_o.address_tag    = s_mem_addr[CVA6Cfg.DCACHE_TAG_WIDTH + CVA6Cfg.DCACHE_INDEX_WIDTH-1 : CVA6Cfg.DCACHE_INDEX_WIDTH]; //44'h00000080025;
-        req_port_o.address_index  = s_mem_addr[CVA6Cfg.DCACHE_INDEX_WIDTH-1:0];                                                       //12'hF50;s_mem_addr[CVA6Cfg.DCACHE_INDEX_WIDTH-1:0];
+        req_port_o.address_tag    = s_mem_addr[CVA6Cfg.DCACHE_TAG_WIDTH + CVA6Cfg.DCACHE_INDEX_WIDTH-1 : CVA6Cfg.DCACHE_INDEX_WIDTH];
+        req_port_o.address_index  = s_mem_addr[CVA6Cfg.DCACHE_INDEX_WIDTH-1:0];
         s_mem_rdata               = req_port_i.data_rdata;
         req_port_o.data_wdata     = s_mem_wdata;
         req_port_o.data_we        = s_mem_we; 
