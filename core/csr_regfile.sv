@@ -113,6 +113,8 @@ module csr_regfile
     output logic mxr_o,
     // Make Executable Readable for VS-mode - EX_STAGE
     output logic vmxr_o,
+    // MMPT register - EX_STAGE
+    output logic [CVA6Cfg.XLEN-1:0] mmpt_o,
     // TO_BE_COMPLETED - EX_STAGE
     output logic [CVA6Cfg.PPNW-1:0] satp_ppn_o,
     // TO_BE_COMPLETED - EX_STAGE
@@ -214,6 +216,8 @@ module csr_regfile
   riscv::mstatus_rv_t mstatus_q, mstatus_d;
   riscv::hstatus_rv_t hstatus_q, hstatus_d;
   riscv::mstatus_rv_t vsstatus_q, vsstatus_d;
+  // MPT register
+  riscv::mmpt_rv_t mmpt_d, mmpt_q;
   logic [CVA6Cfg.XLEN-1:0] mstatus_extended;
   logic [CVA6Cfg.XLEN-1:0] vsstatus_extended;
   satp_t satp_q, satp_d;
@@ -519,6 +523,9 @@ module csr_regfile
         end
 
         // machine mode registers
+        riscv::CSR_MMPT: 
+        if (CVA6Cfg.SMMPT) csr_rdata = mmpt_q;
+        else read_access_exception = 1'b1;
         riscv::CSR_MSTATUS: csr_rdata = mstatus_extended;
         riscv::CSR_MSTATUSH:
         if (CVA6Cfg.XLEN == 32) csr_rdata = '0;
@@ -937,6 +944,11 @@ module csr_regfile
       dscratch1_d = dscratch1_q;
     end
     mstatus_d = mstatus_q;
+    
+    if (CVA6Cfg.SMMPT) begin
+      mmpt_d = mmpt_q;
+    end
+
     if (CVA6Cfg.RVH) begin
       hstatus_d  = hstatus_q;
       vsstatus_d = vsstatus_q;
@@ -1469,6 +1481,12 @@ module csr_regfile
             end
           end
           mie_d = (mie_q & ~mask) | (csr_wdata & mask); // we only support supervisor and M-mode interrupts
+        end
+
+        riscv::CSR_MMPT: begin
+          if (CVA6Cfg.SMMPT) begin
+            mmpt_d = csr_wdata;
+          end
         end
 
         riscv::CSR_MTVEC: begin
@@ -2475,6 +2493,10 @@ module csr_regfile
     assign jvt_o.base = '0;
     assign jvt_o.mode = '0;
   end
+  
+  // MPT outputs
+  assign mmpt_o = CVA6Cfg.SMMPT ? mmpt_q : '0;
+
   // MMU outputs
   assign satp_ppn_o  = CVA6Cfg.RVS ? satp_q.ppn : '0;
   assign vsatp_ppn_o = CVA6Cfg.RVH ? vsatp_q.ppn : '0;
@@ -2637,6 +2659,7 @@ module csr_regfile
         dscratch1_q  <= dscratch1_d;
       end
       // machine mode registers
+      if (CVA6Cfg.SMMPT) mmpt_q <= mmpt_d;
       mstatus_q        <= mstatus_d;
       mtvec_rst_load_q <= 1'b0;
       mtvec_q          <= mtvec_d;

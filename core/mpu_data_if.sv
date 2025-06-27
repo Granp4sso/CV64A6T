@@ -75,11 +75,13 @@ module mpu_data_if
 
     `DECLARE_MEM_BUS(m_load,CVA6Cfg.CVA6ConfigXlen);
     `DECLARE_MEM_BUS(m_store, CVA6Cfg.CVA6ConfigXlen);
-    
+
+generate
+  if (CVA6Cfg.SMMPT) begin : gen_mptw_load
     // ------------------
     // MPT used by LOAD unit
     // ------------------ 
-    mpt_top # (
+    mpt_top #(
     ) i_mptw_load (
         .clk_i,
         .rst_ni,
@@ -106,6 +108,7 @@ module mpu_data_if
         .allow_o                (allow_load_o)
     );
 
+
     // ------------------
     // MEM to DCACHE protocol converter for MPTW of the Load Unit
     // ------------------    
@@ -128,36 +131,47 @@ module mpu_data_if
         .req_port_i             (req_port_i_mptw_load),
         .req_port_o             (req_port_o_mptw_load)
     );
+  end else begin
+    assign load_access_page_fault_o = 1'b0;
+    assign load_format_error_o = NO_ERROR;
+    assign ptw_load_busy_o = 1'b0;
+    assign ptw_load_valid_o = 1'b0;
+    assign plb_entry_load_o = 72'b0;
+    assign allow_load_o = 1'b0;
+  end
+endgenerate
 
-    // ------------------
-    // MPT used by STORE unit
-    // ------------------
-    mpt_top # (
-    ) i_mptw_store (
-        .clk_i,
-        .rst_ni,
-        .flush_i,
-        .ptw_enable_i           (ptw_store_enable_i),
-        .spa_i,    
-        .addr_valid_i           (addr_store_valid_i),
-        .mmpt_reg_i             (mmpt_store_reg_i),
-        .access_type_i          (riscv::ACCESS_WRITE),
-        .m_mem_req              (m_store_mem_req),
-        .m_mem_gnt              (m_store_mem_gnt),
-        .m_mem_valid            (m_store_mem_valid),
-        .m_mem_addr             (m_store_mem_addr),
-        .m_mem_rdata            (m_store_mem_rdata),
-        .m_mem_wdata            (m_store_mem_wdata),
-        .m_mem_we               (m_store_mem_we),
-        .m_mem_be               (m_store_mem_be),
-        .m_mem_error            (m_store_mem_error),
-        .access_page_fault_o    (store_access_page_fault_o),          
-        .format_error_o         (store_format_error_o),          
-        .ptw_busy_o             (ptw_store_busy_o),
-        .ptw_valid_o            (ptw_store_valid_o),
-        .plb_entry_o            (plb_entry_store_o),          
-        .allow_o                (allow_store_o)
-    );
+generate
+    if(CVA6Cfg.SMMPT) begin : gen_mptw_store
+        // ------------------
+        // MPT used by STORE unit
+        // ------------------
+        mpt_top # (
+        ) i_mptw_store (
+            .clk_i,
+            .rst_ni,
+            .flush_i,
+            .ptw_enable_i           (ptw_store_enable_i),
+            .spa_i,    
+            .addr_valid_i           (addr_store_valid_i),
+            .mmpt_reg_i             (mmpt_store_reg_i),
+            .access_type_i          (riscv::ACCESS_WRITE),
+            .m_mem_req              (m_store_mem_req),
+            .m_mem_gnt              (m_store_mem_gnt),
+            .m_mem_valid            (m_store_mem_valid),
+            .m_mem_addr             (m_store_mem_addr),
+            .m_mem_rdata            (m_store_mem_rdata),
+            .m_mem_wdata            (m_store_mem_wdata),
+            .m_mem_we               (m_store_mem_we),
+            .m_mem_be               (m_store_mem_be),
+            .m_mem_error            (m_store_mem_error),
+            .access_page_fault_o    (store_access_page_fault_o),          
+            .format_error_o         (store_format_error_o),          
+            .ptw_busy_o             (ptw_store_busy_o),
+            .ptw_valid_o            (ptw_store_valid_o),
+            .plb_entry_o            (plb_entry_store_o),          
+            .allow_o                (allow_store_o)
+        );
 
     // ------------------
     // MEM to DCACHE protocol converter for MPTW of the Store Unit
@@ -181,7 +195,15 @@ module mpu_data_if
         .req_port_i             (req_port_i_mptw_store),
         .req_port_o             (req_port_o_mptw_store)
     );
-
+    end else begin
+    assign store_access_page_fault_o = 1'b0;
+    assign store_format_error_o = NO_ERROR;
+    assign ptw_store_busy_o = 1'b0;
+    assign ptw_store_valid_o = 1'b0;
+    assign plb_entry_store_o = 72'b0;
+    assign allow_store_o = 1'b0;
+  end
+endgenerate
     // ------------------
     // PMP
     // ------------------
