@@ -111,6 +111,8 @@ module load_store_unit
     input  logic                                      mxr_i,
     // Make Executable Readable Virtual Supervisor - CSR_REGFILE
     input  logic                                      vmxr_i,
+    // MMPT register - CSR_REGFILE
+    input logic [CVA6Cfg.XLEN-1:0] mmpt_i,
     // TO_BE_COMPLETED - TO_BE_COMPLETED
     input  logic             [      CVA6Cfg.PPNW-1:0] satp_ppn_i,
     // TO_BE_COMPLETED - TO_BE_COMPLETED
@@ -634,7 +636,7 @@ module load_store_unit
     .ptw_store_enable_i        (mptw_store_en_int),
     .spa_i                     (cva6_mmu_paddr),
     .addr_store_valid_i        (mptw_store_en_int),
-    .mmpt_store_reg_i          (64'h3300_0000_0000_0001),
+    .mmpt_store_reg_i          (mmpt_i),
     .store_access_page_fault_o (store_access_page_fault_int),
     .store_format_error_o      (store_format_error_int),
     .ptw_store_busy_o          (mptw_store_busy_int),
@@ -644,7 +646,7 @@ module load_store_unit
     // MPTW of the Load Unit
     .ptw_load_enable_i         (mptw_load_en_int),
     .addr_load_valid_i         (mptw_load_en_int),
-    .mmpt_load_reg_i           (64'h3300_0000_0000_0001),
+    .mmpt_load_reg_i           (mmpt_i),
     .load_access_page_fault_o  (load_access_page_fault_int),
     .load_format_error_o       (load_format_error_int),
     .ptw_load_busy_o           (mptw_load_busy_int),                   
