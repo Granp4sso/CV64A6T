@@ -33,6 +33,8 @@ module load_unit
     input logic rst_ni,
     // Flush signal - CONTROLLER
     input logic flush_i,
+    // Current privilege level - CSR_REGFILE
+    input riscv::priv_lvl_t priv_lvl_i,
     // Load request is valid - LSU_BYPASS
     input logic valid_i,
     // Load request input - LSU_BYPASS
@@ -260,27 +262,42 @@ module load_unit
       // Wait for MPT to give allow signal
       WAIT_MPT: begin
         translation_req_o = 1'b1;
-        mptw_enable_o = 1'b1;
-        if (mptw_valid_i) begin
-          mptw_enable_o = 1'b0;
-          // only if access allowed make a dcache request else stall
-          if (mptw_allow_i) begin
-            // make a load request to memory
-            req_port_o.data_req = 1'b1;
-            // we got no data grant so wait for the grant before sending the tag
-            if (!req_port_i.data_gnt) begin
-              state_d = WAIT_GNT;
+        if (priv_lvl_i == riscv::PRIV_LVL_M || !CVA6Cfg.SMMPT) begin
+          // Skip MPT check in Machine Mode: directly issue memory request
+          req_port_o.data_req = 1'b1;
+          if (!req_port_i.data_gnt) begin
+            state_d = WAIT_GNT;
+          end else begin
+            if (CVA6Cfg.MmuPresent && !dtlb_hit_i) begin
+              state_d = ABORT_TRANSACTION;
             end else begin
-              if (CVA6Cfg.MmuPresent && !dtlb_hit_i) begin
-                state_d = ABORT_TRANSACTION;
+              if (!stall_ni) begin
+                state_d  = SEND_TAG;
+                pop_ld_o = 1'b1;
+              end else if (CVA6Cfg.NonIdemPotenceEn) begin
+                state_d = ABORT_TRANSACTION_NI;
+              end
+            end
+          end
+        end else begin
+          // User/Supervisor mode: wait for MPT to respond
+          mptw_enable_o = 1'b1;
+          if (mptw_valid_i) begin
+            mptw_enable_o = 1'b0;
+            if (mptw_allow_i) begin
+              req_port_o.data_req = 1'b1;
+              if (!req_port_i.data_gnt) begin
+                state_d = WAIT_GNT;
               end else begin
-                if (!stall_ni) begin
-                  // we got a grant and a hit on the DTLB so we can send the tag in the next cycle
-                  state_d  = SEND_TAG;
-                  pop_ld_o = 1'b1;
-                  // translation valid but this is to NC and the WB is not yet empty.
-                end else if (CVA6Cfg.NonIdemPotenceEn) begin
-                  state_d = ABORT_TRANSACTION_NI;
+                if (CVA6Cfg.MmuPresent && !dtlb_hit_i) begin
+                  state_d = ABORT_TRANSACTION;
+                end else begin
+                  if (!stall_ni) begin
+                    state_d  = SEND_TAG;
+                    pop_ld_o = 1'b1;
+                  end else if (CVA6Cfg.NonIdemPotenceEn) begin
+                    state_d = ABORT_TRANSACTION_NI;
+                  end
                 end
               end
             end
