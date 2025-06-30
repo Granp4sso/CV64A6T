@@ -21,10 +21,13 @@ module store_buffer
     parameter type dcache_req_i_t = logic,
     parameter type dcache_req_o_t = logic
 ) (
+    
     input logic clk_i,  // Clock
     input logic rst_ni,  // Asynchronous reset active low
     input logic flush_i,  // if we flush we need to pause the transactions on the memory
                           // otherwise we will run in a deadlock with the memory arbiter
+    // Current privilege level - CSR_REGFILE
+    input riscv::priv_lvl_t priv_lvl_i,
     input logic stall_st_pending_i,  // Stall issuing non-speculative request
     output logic         no_st_pending_o, // non-speculative queue is empty (e.g.: everything is committed to the memory hierarchy)
     output logic         store_buffer_empty_o, // there is no store pending in neither the speculative unit or the non-speculative queue
@@ -176,23 +179,35 @@ module store_buffer
     // there should be no commit when we are flushing
     // if the entry in the commit queue is valid and not speculative anymore we can issue this instruction
     if (commit_queue_q[commit_read_pointer_q].valid && !stall_st_pending_i) begin
-      // Now we can enable MPT and wait for allow signal before making a dcache request by the store unit
-      mptw_enable_o = 1'b1;
-      if (mptw_valid_i) begin
-          mptw_enable_o = 1'b0;
-          // if access allowed send tag to dcache else stall
-          if (mptw_allow_i) begin
-              req_port_o.data_req = 1'b1;
-              if (req_port_i.data_gnt) begin
-                // we can evict it from the commit buffer
-                commit_queue_n[commit_read_pointer_q].valid = 1'b0;
-                // advance the read_pointer
-                commit_read_pointer_n = commit_read_pointer_q + 1'b1;
-                commit_status_cnt--;
+        if (priv_lvl_i == riscv::PRIV_LVL_M || !CVA6Cfg.SMMPT) begin 
+          // In Machine Mode: skip MPT, issue request directly
+          req_port_o.data_req = 1'b1;
+          if (req_port_i.data_gnt) begin
+            // we can evict it from the commit buffer
+            commit_queue_n[commit_read_pointer_q].valid = 1'b0;
+            // advance the read_pointer
+            commit_read_pointer_n = commit_read_pointer_q + 1'b1;
+            commit_status_cnt--;
+          end
+        end else begin
+          mptw_enable_o = 1'b1;
+            if (mptw_valid_i) begin
+                mptw_enable_o = 1'b0;
+                // if access allowed send tag to dcache else stall
+                if (mptw_allow_i) begin
+                    req_port_o.data_req = 1'b1;
+                    if (req_port_i.data_gnt) begin
+                      // we can evict it from the commit buffer
+                      commit_queue_n[commit_read_pointer_q].valid = 1'b0;
+                      // advance the read_pointer
+                      commit_read_pointer_n = commit_read_pointer_q + 1'b1;
+                      commit_status_cnt--;
+                    end
+                end
               end
           end
-        end
-    end
+      end
+
     // we ignore the rvalid signal for now as we assume that the store
     // happened if we got a grant
 

@@ -120,6 +120,21 @@ package riscv;
     logic wpri0;  // writes preserved reads ignored
   } mstatus_rv_t;
 
+  // MPT operational modes for 64-bit systems
+  typedef enum logic [3:0] {
+      MPT_BARE = 4'b0000, // No supervisor domain protection
+      MPT_43   = 4'b0001, // Page-based supervisor domain protection up to 43-bit physical addresses
+      MPT_52   = 4'b0010, // Page-based supervisor domain protection up to 52-bit physical addresses
+      MPT_64   = 4'b0011  // Page-based supervisor domain protection up to 64-bit physical addresses
+  } mpt_mode_e;
+
+  typedef struct packed{
+    mpt_mode_e mode;  // Address protection scheme (MPT Mode to be enforced) for physical addresses
+    logic [5:0] sdid; // Supervisor domain identifier. Must be set to 0 if mode = BARE
+    logic [1:0] wpri; // Write-preserved, read-ignored bits
+    logic [51:0] ppn; // Physical page number (PPN) of the root page of the memory protection tables. Must be set to 0 if mode = BARE
+  } mmpt_rv_t;
+
   typedef struct packed {
     logic        stce;   // not implemented - requires Sctc extension
     logic        pbmte;  // not implemented - requires Svpbmt extension
@@ -637,6 +652,8 @@ package riscv;
     CSR_ICACHE           = 12'h7C0,
     // Accelerator memory consistency (platform specific)
     CSR_ACC_CONS         = 12'h7C2,
+    // Memory Protection Table
+    CSR_MMPT             = 12'h7C3,
     // Triggers
     CSR_TSELECT          = 12'h7A0,
     CSR_TDATA1           = 12'h7A1,

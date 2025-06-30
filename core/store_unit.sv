@@ -28,6 +28,8 @@ module store_unit
     input logic rst_ni,
     // Flush - CONTROLLER
     input logic flush_i,
+    // Current privilege level - CSR_REGFILE
+    input riscv::priv_lvl_t priv_lvl_i,
     // TO_BE_COMPLETED - TO_BE_COMPLETED
     input logic stall_st_pending_i,
     // TO_BE_COMPLETED - TO_BE_COMPLETED
@@ -299,6 +301,7 @@ module store_unit
       .clk_i,
       .rst_ni,
       .flush_i,
+      .priv_lvl_i,
       .stall_st_pending_i,
       .no_st_pending_o,
       .store_buffer_empty_o,

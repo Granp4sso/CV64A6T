@@ -76,6 +76,8 @@ package config_pkg;
     bit                          RVC;
     // Hypervisor RISC-V extension
     bit                          RVH;
+    // SMMPT RISC-V extension
+    bit                          SMMPT;
     // Zcb RISC-V extension
     bit                          RVZCB;
     // Zcmp RISC-V extension
@@ -276,6 +278,7 @@ package config_pkg;
     bit          RVV;
     bit          RVC;
     bit          RVH;
+    bit          SMMPT;
     bit          RVZCB;
     bit          RVZCMP;
     bit          RVZCMT;
