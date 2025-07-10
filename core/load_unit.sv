@@ -96,6 +96,7 @@ module load_unit
     WAIT_TRANSLATION,
     WAIT_FLUSH,
     WAIT_MPT,
+    MPT_EXCEPTION,
     WAIT_WB_EMPTY
   }
       state_d, state_q;
@@ -300,9 +301,18 @@ module load_unit
                   end
                 end
               end
+            end else begin
+              state_d = MPT_EXCEPTION;
             end
           end
         end
+      end
+
+      // mpt access exception occured
+      MPT_EXCEPTION: begin
+        state_d = IDLE;
+        ex_o.cause = riscv::LD_ACCESS_FAULT;
+        pop_ld_o = 1'b1;
       end
 
       IDLE: begin
@@ -468,6 +478,13 @@ module load_unit
       trans_id_o = lsu_ctrl_i.trans_id;
       valid_o = 1'b1;
       ex_o.valid = 1'b1;
+    end
+
+    // exception raised due to a violation of MPT access permissions
+    if (state_q == MPT_EXCEPTION) begin
+      valid_o = 1'b1;
+      ex_o.valid = 1'b1;
+      trans_id_o = lsu_ctrl_i.trans_id;
     end
   end
 

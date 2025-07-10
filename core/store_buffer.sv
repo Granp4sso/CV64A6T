@@ -18,6 +18,8 @@ module store_buffer
   import ariane_pkg::*;
 #(
     parameter config_pkg::cva6_cfg_t CVA6Cfg = config_pkg::cva6_cfg_empty,
+    parameter type exception_t = logic,
+    parameter type lsu_ctrl_t = logic,
     parameter type dcache_req_i_t = logic,
     parameter type dcache_req_o_t = logic
 ) (
@@ -54,10 +56,27 @@ module store_buffer
     input logic mptw_allow_i,
     output logic mptw_enable_o,
     
+    // store exception due to MPT access violation - ISSUE_STAGE
+    output exception_t ex_o,
+
+    // virtual address in, for tval only
+    input logic [CVA6Cfg.VLEN-1:0] lsu_vaddr_i,
+    input logic ld_st_v_i,
+    // Data input - ISSUE_STAGE
+    input lsu_ctrl_t lsu_ctrl_i,
     // D$ interface
     input  dcache_req_o_t req_port_i,
     output dcache_req_i_t req_port_o
 );
+  // virtual address causing the exception
+  logic [CVA6Cfg.XLEN-1:0]  lsu_vaddr_xlen;
+
+  // For exception tval reporting, use the virtual address and resize it
+  if (CVA6Cfg.VLEN >= CVA6Cfg.XLEN) begin
+    assign lsu_vaddr_xlen   = lsu_vaddr_i[CVA6Cfg.XLEN-1:0];
+  end else begin
+    assign lsu_vaddr_xlen   = CVA6Cfg.XLEN'(lsu_vaddr_i);
+  end
 
   // the store queue has two parts:
   // 1. Speculative queue
@@ -175,6 +194,8 @@ module store_buffer
 
     req_port_o.data_req    = 1'b0;
     mptw_enable_o = 1'b0;
+    ex_o.valid = 1'b0;
+    ex_o.cause = 64'b0;
 
     // there should be no commit when we are flushing
     // if the entry in the commit queue is valid and not speculative anymore we can issue this instruction
@@ -203,6 +224,23 @@ module store_buffer
                       commit_read_pointer_n = commit_read_pointer_q + 1'b1;
                       commit_status_cnt--;
                     end
+                end else begin
+                        // exception raised due to a violation of MPT access permissions
+                        ex_o.valid = 1'b1; 
+                        ex_o.cause = riscv::ST_ACCESS_FAULT;
+                        if (CVA6Cfg.TvalEn) begin
+                          ex_o.tval = lsu_vaddr_xlen;
+                        end
+                        if (CVA6Cfg.RVH) begin
+                          ex_o.tval2 = '0;
+                          ex_o.tinst = '0;
+                          ex_o.gva   = ld_st_v_i;
+                        end
+                        // we can evict it from the commit buffer
+                        commit_queue_n[commit_read_pointer_q].valid = 1'b0;
+                        // advance the read_pointer
+                        commit_read_pointer_n = commit_read_pointer_q + 1'b1;
+                        commit_status_cnt--;
                 end
               end
           end
