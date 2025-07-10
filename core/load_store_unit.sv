@@ -532,6 +532,8 @@ module load_store_unit
       .mptw_valid_i          (mptw_store_valid_int),
       .mptw_allow_i          (mptw_store_allow_int),
       .mptw_enable_o         (mptw_store_en_int   ),
+      .lsu_vaddr_i           (mmu_vaddr),
+      .ld_st_v_i,
       // to memory arbiter
       .req_port_i           (dcache_req_ports_i[2]),
       .req_port_o           (dcache_req_ports_o[2])
