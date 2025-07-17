@@ -580,6 +580,7 @@ module load_store_unit
       .mptw_valid_i        (mptw_load_valid_int),
       .mptw_allow_i        (mptw_load_allow_int),
       .mptw_enable_o       (mptw_load_en_int),
+      .ld_st_v_i,
       // to memory arbiter
       .req_port_i           (load_dcache_req_i),
       .req_port_o           (load_dcache_req_o),
