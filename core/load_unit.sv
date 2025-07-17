@@ -79,6 +79,8 @@ module load_unit
     input  logic mptw_valid_i,
     input  logic mptw_allow_i,
     output logic mptw_enable_o,
+    // load/store virtualization mode bit
+    input logic ld_st_v_i,
     // Data cache request out - CACHES
     input dcache_req_o_t req_port_i,
     // Data cache request in - CACHES
@@ -86,6 +88,18 @@ module load_unit
     // Presence of non-idempotent operations in the D$ write buffer - CACHES
     input logic dcache_wbuffer_not_ni_i
 );
+
+  // virtual address causing the exception
+  logic [CVA6Cfg.XLEN-1:0]  lsu_vaddr_xlen;
+
+  // For exception tval reporting, use the virtual address and resize it
+  if (CVA6Cfg.VLEN >= CVA6Cfg.XLEN) begin
+    assign lsu_vaddr_xlen   = lsu_ctrl_i.vaddr[CVA6Cfg.XLEN-1:0];
+  end else begin
+    assign lsu_vaddr_xlen   = CVA6Cfg.XLEN'(lsu_ctrl_i.vaddr);
+  end
+
+
   enum logic [3:0] {
     IDLE,
     WAIT_GNT,
@@ -484,7 +498,14 @@ module load_unit
     if (state_q == MPT_EXCEPTION) begin
       valid_o = 1'b1;
       ex_o.valid = 1'b1;
-      trans_id_o = lsu_ctrl_i.trans_id;
+      if (CVA6Cfg.TvalEn) begin
+        ex_o.tval = lsu_vaddr_xlen;
+      end
+      if (CVA6Cfg.RVH) begin
+        ex_o.tval2 = '0;
+        ex_o.tinst = '0;
+        ex_o.gva   = ld_st_v_i;
+      end
     end
   end
 
