@@ -650,7 +650,7 @@ module cva6
   // ----------------
   // DCache <-> *
   // ----------------
-  dcache_req_i_t [3:0] dcache_req_ports_ex_cache; // Requests from ex_stage to dcache. [0] --> PTW, [1] --> Load Unit, [2] --> Accellerator, [3] --> Read requests from MPTW of Store Unit
+  dcache_req_i_t [3:0] dcache_req_ports_ex_cache; // Requests from ex_stage to dcache. [0] --> PTW, [1] --> Load Unit, [2] --> Accelerator, [3] --> Read requests from MPTW of Store Unit
   dcache_req_o_t [3:0] dcache_req_ports_cache_ex; // Resposes from dcache to ex_stage
   dcache_req_i_t dcache_req_ports_id_cache;
   dcache_req_o_t dcache_req_ports_cache_id;
@@ -1330,7 +1330,7 @@ module cva6
     assign dcache_req_to_cache[0] = dcache_req_ports_ex_cache[0];
   end
   assign dcache_req_to_cache[1] = dcache_req_ports_ex_cache[1];  // rd_port_1 (Load Unit)
-  assign dcache_req_to_cache[2] = dcache_req_ports_acc_cache[0]; // rd_port_2 (Accellerator)
+  assign dcache_req_to_cache[2] = dcache_req_ports_acc_cache[0]; // rd_port_2 (Accelerator)
   assign dcache_req_to_cache[3] = dcache_req_ports_ex_cache[3];  // rd_port_3 (MPTW of the Store Unit)
   // Use (NumPorts-1) instead of a fixed index for the store unit's write port
   // to improve flexibility and maintainability of the code.
