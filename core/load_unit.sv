@@ -79,6 +79,8 @@ module load_unit
     input  logic mptw_valid_i,
     input  logic mptw_allow_i,
     output logic mptw_enable_o,
+    // load/store virtualization mode bit
+    input logic ld_st_v_i,
     // Data cache request out - CACHES
     input dcache_req_o_t req_port_i,
     // Data cache request in - CACHES
@@ -86,6 +88,18 @@ module load_unit
     // Presence of non-idempotent operations in the D$ write buffer - CACHES
     input logic dcache_wbuffer_not_ni_i
 );
+
+  // virtual address causing the exception
+  logic [CVA6Cfg.XLEN-1:0]  lsu_vaddr_xlen;
+
+  // For exception tval reporting, use the virtual address and resize it
+  if (CVA6Cfg.VLEN >= CVA6Cfg.XLEN) begin
+    assign lsu_vaddr_xlen   = lsu_ctrl_i.vaddr[CVA6Cfg.XLEN-1:0];
+  end else begin
+    assign lsu_vaddr_xlen   = CVA6Cfg.XLEN'(lsu_ctrl_i.vaddr);
+  end
+
+
   enum logic [3:0] {
     IDLE,
     WAIT_GNT,
@@ -96,6 +110,7 @@ module load_unit
     WAIT_TRANSLATION,
     WAIT_FLUSH,
     WAIT_MPT,
+    MPT_EXCEPTION,
     WAIT_WB_EMPTY
   }
       state_d, state_q;
@@ -300,9 +315,18 @@ module load_unit
                   end
                 end
               end
+            end else begin
+              state_d = MPT_EXCEPTION;
             end
           end
         end
+      end
+
+      // mpt access exception occured
+      MPT_EXCEPTION: begin
+        state_d = IDLE;
+        ex_o.cause = riscv::LD_ACCESS_FAULT;
+        pop_ld_o = 1'b1;
       end
 
       IDLE: begin
@@ -404,7 +428,7 @@ module load_unit
           state_d = WAIT_WB_EMPTY;
         end else if (state_q == WAIT_WB_EMPTY && CVA6Cfg.NonIdemPotenceEn && dcache_wbuffer_not_ni_i) begin
           // Wait until the write-back buffer is empty in the data cache.
-          // the write buffer is empty, so lets go and re-do the translation.
+          // the write buffer is empty, so let's go and re-do the translation.
           state_d = WAIT_TRANSLATION;
         end else if(state_q == WAIT_TRANSLATION && (CVA6Cfg.MmuPresent || CVA6Cfg.NonIdemPotenceEn)) begin
           translation_req_o = 1'b1;
@@ -424,7 +448,7 @@ module load_unit
       end
     endcase
 
-    // if we just flushed and the queue is not empty or we are getting an rvalid this cycle wait in a extra stage
+    // if we just flushed and the queue is not empty or we are getting an rvalid this cycle wait in an extra stage
     if (flush_i) begin
       state_d = WAIT_FLUSH;
     end
@@ -447,7 +471,7 @@ module load_unit
     valid_o    = 1'b0;
     ex_o.valid = 1'b0;
 
-    // we got an rvalid and it's corresponding request was not flushed
+    // we got an rvalid and its corresponding request was not flushed
     if (req_port_i.data_rvalid && !ldbuf_flushed_q[ldbuf_rindex]) begin
       // if the response corresponds to the last request, check that we are not killing it
       if ((ldbuf_last_id_q != ldbuf_rindex) || !req_port_o.kill_req) valid_o = 1'b1;
@@ -468,6 +492,20 @@ module load_unit
       trans_id_o = lsu_ctrl_i.trans_id;
       valid_o = 1'b1;
       ex_o.valid = 1'b1;
+    end
+
+    // exception raised due to a violation of MPT access permissions
+    if (state_q == MPT_EXCEPTION) begin
+      valid_o = 1'b1;
+      ex_o.valid = 1'b1;
+      if (CVA6Cfg.TvalEn) begin
+        ex_o.tval = lsu_vaddr_xlen;
+      end
+      if (CVA6Cfg.RVH) begin
+        ex_o.tval2 = '0;
+        ex_o.tinst = '0;
+        ex_o.gva   = ld_st_v_i;
+      end
     end
   end
 

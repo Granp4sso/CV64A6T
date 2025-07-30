@@ -2659,7 +2659,7 @@ module csr_regfile
         dscratch1_q  <= dscratch1_d;
       end
       // machine mode registers
-      if (CVA6Cfg.SMMPT) mmpt_q <= mmpt_d;
+      mmpt_q <= (CVA6Cfg.SMMPT) ? mmpt_d : '0;
       mstatus_q        <= mstatus_d;
       mtvec_rst_load_q <= 1'b0;
       mtvec_q          <= mtvec_d;
