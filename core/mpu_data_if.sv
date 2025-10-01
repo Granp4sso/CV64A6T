@@ -42,7 +42,6 @@ module mpu_data_if
         // MPTW of the Store Unit
         input logic flush_i,
         input logic ptw_store_enable_i,                  
-        input spa_t_u spa_i,                       
         input logic addr_store_valid_i,                  
         input mmpt_reg_t mmpt_store_reg_i,               
         output logic store_access_page_fault_o,           
@@ -63,18 +62,36 @@ module mpu_data_if
         output plb_entry_t plb_entry_load_o,            
         output logic allow_load_o,
 
-        // Data cache request out - CACHES from MPTW LOAD UNIT
-        input dcache_req_o_t req_port_i_mptw_load,
-        // Data cache request in - CACHES MPTW LOAD UNIT
-        output dcache_req_i_t req_port_o_mptw_load,
-        // Data cache request out - CACHES from MPTW STORE UNIT
-        input dcache_req_o_t req_port_i_mptw_store,
-        // Data cache request in - CACHES MPTW STORE UNIT
-        output dcache_req_i_t req_port_o_mptw_store   
+        // MPTW of the IF Unit
+        input logic ptw_ifu_enable_i, 
+        input logic addr_ifu_valid_i,      
+        input mmpt_reg_t mmpt_ifu_reg_i,
+        output logic ifu_access_page_fault_o,
+        output page_format_fault_e ifu_format_error_o,
+        output logic ptw_ifu_busy_o,                   
+        output logic ptw_ifu_valid_o,                  
+        output plb_entry_t plb_entry_ifu_o,            
+        output logic allow_ifu_o,
+
+        // Data cache request output - CACHE
+        input dcache_req_o_t req_port_i_mptw_load,      // response from D$
+        // Data cache request in - CACHE
+        output dcache_req_i_t req_port_o_mptw_load,     // request to D$
+
+        // Data cache request output - CACHE
+        input dcache_req_o_t req_port_i_mptw_if,        // response from D$
+        // Data cache request in - CACHE 
+        output dcache_req_i_t req_port_o_mptw_if,       // request to D$
+
+        // Data cache request output - CACHE
+        input dcache_req_o_t req_port_i_mptw_store,     // response from D$
+        // Data cache request in - CACHE
+        output dcache_req_i_t req_port_o_mptw_store     // request to D$ 
     );
 
     `DECLARE_MEM_BUS(m_load,CVA6Cfg.CVA6ConfigXlen);
     `DECLARE_MEM_BUS(m_store, CVA6Cfg.CVA6ConfigXlen);
+    `DECLARE_MEM_BUS(m_if, CVA6Cfg.CVA6ConfigXlen);
 
 generate
   if (CVA6Cfg.SMMPT) begin : gen_mptw_load
@@ -87,7 +104,7 @@ generate
         .rst_ni,
         .flush_i,
         .ptw_enable_i           (ptw_load_enable_i),
-        .spa_i,
+        .spa_i                  (lsu_paddr_i),
         .addr_valid_i           (addr_load_valid_i),
         .mmpt_reg_i             (mmpt_load_reg_i),
         .access_type_i          (riscv::ACCESS_READ),
@@ -107,7 +124,6 @@ generate
         .plb_entry_o            (plb_entry_load_o),
         .allow_o                (allow_load_o)
     );
-
 
     // ------------------
     // MEM to DCACHE protocol converter for MPTW of the Load Unit
@@ -131,17 +147,18 @@ generate
         .req_port_i             (req_port_i_mptw_load),
         .req_port_o             (req_port_o_mptw_load)
     );
-  end else begin
-    assign load_access_page_fault_o = 1'b0;
-    assign load_format_error_o = NO_ERROR;
-    assign ptw_load_busy_o = 1'b0;
-    assign ptw_load_valid_o = 1'b0;
-    assign plb_entry_load_o = 72'b0;
-    assign allow_load_o = 1'b0;
-  end
-endgenerate
 
-generate
+    end else begin
+
+        assign load_access_page_fault_o = 1'b0;
+        assign load_format_error_o = NO_ERROR;
+        assign ptw_load_busy_o = 1'b0;
+        assign ptw_load_valid_o = 1'b0;
+        assign plb_entry_load_o = 72'b0;
+        assign allow_load_o = 1'b0;
+
+    end
+
     if(CVA6Cfg.SMMPT) begin : gen_mptw_store
         // ------------------
         // MPT used by STORE unit
@@ -152,7 +169,7 @@ generate
             .rst_ni,
             .flush_i,
             .ptw_enable_i           (ptw_store_enable_i),
-            .spa_i,    
+            .spa_i                  (lsu_paddr_i),    
             .addr_valid_i           (addr_store_valid_i),
             .mmpt_reg_i             (mmpt_store_reg_i),
             .access_type_i          (riscv::ACCESS_WRITE),
@@ -195,14 +212,80 @@ generate
         .req_port_i             (req_port_i_mptw_store),
         .req_port_o             (req_port_o_mptw_store)
     );
+
     end else begin
-    assign store_access_page_fault_o = 1'b0;
-    assign store_format_error_o = NO_ERROR;
-    assign ptw_store_busy_o = 1'b0;
-    assign ptw_store_valid_o = 1'b0;
-    assign plb_entry_store_o = 72'b0;
-    assign allow_store_o = 1'b0;
-  end
+
+        assign store_access_page_fault_o = 1'b0;
+        assign store_format_error_o = NO_ERROR;
+        assign ptw_store_busy_o = 1'b0;
+        assign ptw_store_valid_o = 1'b0;
+        assign plb_entry_store_o = 72'b0;
+        assign allow_store_o = 1'b0;
+
+    end
+
+    if(CVA6Cfg.SMMPT) begin : gen_mptw_ifu
+        // ------------------
+        // MPT used by IF unit
+        // ------------------
+        mpt_top # (
+        ) i_mptw_ifu (
+            .clk_i,
+            .rst_ni,
+            .flush_i,
+            .ptw_enable_i           (ptw_ifu_enable_i),
+            .spa_i                  (icache_areq_i.fetch_paddr),    
+            .addr_valid_i           (addr_ifu_valid_i),
+            .mmpt_reg_i             (mmpt_ifu_reg_i),
+            .access_type_i          (riscv::ACCESS_EXEC),
+            .m_mem_req              (m_if_mem_req),
+            .m_mem_gnt              (m_if_mem_gnt),
+            .m_mem_valid            (m_if_mem_valid),
+            .m_mem_addr             (m_if_mem_addr),
+            .m_mem_rdata            (m_if_mem_rdata),
+            .m_mem_wdata            (m_if_mem_wdata),
+            .m_mem_we               (m_if_mem_we),
+            .m_mem_be               (m_if_mem_be),
+            .m_mem_error            (m_if_mem_error),
+            .access_page_fault_o    (ifu_access_page_fault_o),          
+            .format_error_o         (ifu_format_error_o),          
+            .ptw_busy_o             (ptw_ifu_busy_o),
+            .ptw_valid_o            (ptw_ifu_valid_o),
+            .plb_entry_o            (plb_entry_ifu_o),          
+            .allow_o                (allow_ifu_o)
+        );
+
+    // ------------------
+    // MEM to DCACHE protocol converter for MPTW of the IF Unit
+    // ------------------
+    mem_to_dcache_converter #(
+        .CVA6Cfg                (CVA6Cfg),
+        .dcache_req_i_t         (dcache_req_i_t),
+        .dcache_req_o_t         (dcache_req_o_t)
+    ) i_mem_dcache_adp_ifu(
+        .clk_i,
+        .rst_ni,
+        .s_mem_req              (m_if_mem_req),
+        .s_mem_gnt              (m_if_mem_gnt),
+        .s_mem_valid            (m_if_mem_valid),
+        .s_mem_addr             (m_if_mem_addr),
+        .s_mem_rdata            (m_if_mem_rdata),
+        .s_mem_wdata            (m_if_mem_wdata),
+        .s_mem_we               (m_if_mem_we),
+        .s_mem_be               (m_if_mem_be),
+        .s_mem_error            (m_if_mem_error),
+        .req_port_i             (req_port_i_mptw_if),
+        .req_port_o             (req_port_o_mptw_if)
+    );
+    end else begin
+        assign ifu_access_page_fault_o = 1'b0;
+        assign ifu_format_error_o = NO_ERROR;
+        assign ptw_ifu_busy_o = 1'b0;
+        assign ptw_ifu_valid_o = 1'b0;
+        assign plb_entry_ifu_o = 72'b0;
+        assign allow_ifu_o = 1'b0;
+    end
+
 endgenerate
     // ------------------
     // PMP

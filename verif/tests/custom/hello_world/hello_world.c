@@ -18,6 +18,7 @@
 
 
 //*************************************** DEFAULT *************************************** 
+/*
 #include <stdint.h>
 #include <stdio.h>
 
@@ -32,8 +33,7 @@ int main(int argc, char* arg[]) {
 	}
 	return 0;
 }
-
-
+*/
 
 //*************************************** MPT TESTS *************************************** */
 
@@ -125,7 +125,7 @@ int main() {
         : "memory"
     );
 
-    jump_to_s();
+    jump_to_s();  // jump to S-mode
     return 0;
 }
 

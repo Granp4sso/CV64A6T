@@ -17,6 +17,7 @@
 module ex_stage
   import ariane_pkg::*;
 #(
+    parameter int NumPorts = 6,
     parameter config_pkg::cva6_cfg_t CVA6Cfg = config_pkg::cva6_cfg_empty,
     parameter type bp_resolve_t = logic,
     parameter type branchpredict_sbe_t = logic,
@@ -217,9 +218,9 @@ module ex_stage
     // icache translation request - CACHE
     output icache_areq_t icache_areq_o,
     // Data cache request ouput - CACHE
-    input dcache_req_o_t [3:0] dcache_req_ports_i,
+    input dcache_req_o_t [NumPorts-2:0] dcache_req_ports_i,
     // Data cache request input - CACHE
-    output dcache_req_i_t [3:0] dcache_req_ports_o,
+    output dcache_req_i_t [NumPorts-2:0] dcache_req_ports_o,
     // Write buffer is empty - CACHE
     input logic dcache_wbuffer_empty_i,
     // TO_BE_COMPLETED - CACHE
@@ -533,6 +534,7 @@ module ex_stage
   end
 
   load_store_unit #(
+      .NumPorts  (NumPorts),
       .CVA6Cfg   (CVA6Cfg),
       .dcache_req_i_t(dcache_req_i_t),
       .dcache_req_o_t(dcache_req_o_t),

@@ -383,8 +383,9 @@ module cva6
   // - 1 read port for the Load Unit
   // - 1 read port for the Accelerator
   // - 1 read port for the MPT Walker (MPTW) used by the Store Unit
+  // - 1 read port for the MPT Walker (MPTW) used by the IF Unit
   // - 1 write port for the Store Unit
-  localparam NumPorts = 5;
+  localparam NumPorts = 6;
 
   // CVXIF
   cvxif_req_t cvxif_req;
@@ -650,8 +651,8 @@ module cva6
   // ----------------
   // DCache <-> *
   // ----------------
-  dcache_req_i_t [3:0] dcache_req_ports_ex_cache; // Requests from ex_stage to dcache. [0] --> PTW, [1] --> Load Unit, [2] --> Accelerator, [3] --> Read requests from MPTW of Store Unit
-  dcache_req_o_t [3:0] dcache_req_ports_cache_ex; // Resposes from dcache to ex_stage
+  dcache_req_i_t [NumPorts-2:0] dcache_req_ports_ex_cache; // Requests from ex_stage to dcache. [0] --> PTW, [1] --> Load Unit, [2] --> Accelerator, [3] --> Read requests from MPTW of Store Unit, [4] --> Read requests from MPTW of IF Unit
+  dcache_req_o_t [NumPorts-2:0] dcache_req_ports_cache_ex; // Resposes from dcache to ex_stage
   dcache_req_i_t dcache_req_ports_id_cache;
   dcache_req_o_t dcache_req_ports_cache_id;
   dcache_req_i_t [1:0] dcache_req_ports_acc_cache;
@@ -937,6 +938,7 @@ module cva6
   // EX
   // ---------
   ex_stage #(
+      .NumPorts (NumPorts),
       .CVA6Cfg   (CVA6Cfg),
       .bp_resolve_t(bp_resolve_t),
       .branchpredict_sbe_t(branchpredict_sbe_t),
@@ -1332,6 +1334,7 @@ module cva6
   assign dcache_req_to_cache[1] = dcache_req_ports_ex_cache[1];  // rd_port_1 (Load Unit)
   assign dcache_req_to_cache[2] = dcache_req_ports_acc_cache[0]; // rd_port_2 (Accelerator)
   assign dcache_req_to_cache[3] = dcache_req_ports_ex_cache[3];  // rd_port_3 (MPTW of the Store Unit)
+  assign dcache_req_to_cache[4] = dcache_req_ports_ex_cache[4];  // rd_port_4 (MPTW of the IF Unit)
   // Use (NumPorts-1) instead of a fixed index for the store unit's write port
   // to improve flexibility and maintainability of the code.
   assign dcache_req_to_cache[NumPorts-1] = dcache_req_ports_ex_cache[2].data_req ? dcache_req_ports_ex_cache [2] :
@@ -1347,6 +1350,7 @@ module cva6
     assign dcache_req_ports_cache_ex[0] = dcache_req_from_cache[0];
     assign dcache_req_ports_cache_id = '0;
   end
+  assign dcache_req_ports_cache_ex[4]  = dcache_req_from_cache[4];
   assign dcache_req_ports_cache_ex[3]  = dcache_req_from_cache[3];
   assign dcache_req_ports_cache_ex[1]  = dcache_req_from_cache[1];
   assign dcache_req_ports_cache_acc[0] = dcache_req_from_cache[2];
