@@ -619,8 +619,10 @@ module load_store_unit
     assign fetch_vaddr_xlen = CVA6Cfg.XLEN'(icache_areq_i.fetch_vaddr);
   end
   
+  // Activate mptw_ifu logic
   always_comb begin : activate_mptw_ifu
-  icache_areq_o.fetch_valid = 1'b0; 
+  icache_areq_o.fetch_valid = 1'b0;
+  mptw_if_en_int = 1'b0; 
     if (icache_areq_o_int.fetch_valid) begin
       if (priv_lvl_i == riscv::PRIV_LVL_M || !CVA6Cfg.SMMPT) begin
         // Skip MPT check in Machine Mode: directly issue cache request
@@ -635,6 +637,7 @@ module load_store_unit
             // MPT allow access: issue cache request
             icache_areq_o = icache_areq_o_int;
           end else begin
+            icache_areq_o.fetch_valid = 1'b1;
             // MPT doesn't allow access: throw an `Instruction Access Fault`
             icache_areq_o.fetch_exception.cause = riscv::INSTR_ACCESS_FAULT;
             icache_areq_o.fetch_exception.valid = 1'b1;
@@ -707,7 +710,7 @@ module load_store_unit
     .allow_load_o              (mptw_load_allow_int),
     // MPTW of the IF Unit
     .ptw_ifu_enable_i          (mptw_if_en_int), 
-    .addr_ifu_valid_i          (mptw_if_en_int),      
+    .addr_ifu_valid_i          (pmp_icache_areq_i.fetch_valid),      
     .mmpt_ifu_reg_i            (mmpt_i),
     .ifu_access_page_fault_o   (if_access_page_fault_int),
     .ifu_format_error_o        (if_format_error_int),
