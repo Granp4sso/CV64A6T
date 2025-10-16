@@ -42,7 +42,7 @@ void jump_to_s() {
     uintptr_t ms;
     __asm__ volatile ("csrr %0, mstatus" : "=r"(ms));
     ms &= ~(3UL << 11);       // clean MPP
-    ms |=  (0UL << 11);       // MPP = S-mode (1)
+    ms |=  (1UL << 11);       // MPP = S-mode (1)
     __asm__ volatile ("csrw mstatus, %0" :: "r"(ms));
 
     __asm__ volatile ("csrw mepc, %0" :: "r"(S_FUNC_ADDR));
@@ -106,6 +106,7 @@ int main() {
     uint64_t *mpt_entry3 = (uint64_t *)0x90000200;
     *mpt_entry3 = 0x0000000000000003ULL;
 */
+/*
     // Enable MPT via MMPT register
     __asm__ volatile (
         "csrw 0x7C3, %0"
@@ -113,7 +114,7 @@ int main() {
         : "r"(write_val)
         : "memory"
     );
-
+*/
     // Write satp register to enable virtual memory
     __asm__ volatile (
         "csrw satp, %0"
@@ -122,7 +123,7 @@ int main() {
     ); // we have to shift the ppn by 12 bits because PTW computes "a" value as satp.ppn*PAGESIZE where PAGESIZE is 4096 (2^12)
 
     uint64_t *page_table_entry1 = (uint64_t *)0x80008010; // Address of the first page table entry
-    *page_table_entry1 = 0b1000000000000000000000001001011ULL; // Value of the first page table entry
+    *page_table_entry1 = 0b100000000000000000000001001011ULL; // Value of the first page table entry
 
     jump_to_s();  // jump to S-mode
     return 0;
