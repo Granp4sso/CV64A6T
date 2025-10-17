@@ -646,11 +646,9 @@ module load_store_unit
             if (CVA6Cfg.TvalEn) begin
               icache_areq_o.fetch_exception.tval = fetch_vaddr_xlen;
             end
-            if (CVA6Cfg.RVH) begin
               icache_areq_o.fetch_exception.tval2 = '0;
               icache_areq_o.fetch_exception.tinst = '0;
               icache_areq_o.fetch_exception.gva   = v_i;
-            end
           end 
         end
       end
