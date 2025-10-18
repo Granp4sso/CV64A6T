@@ -638,7 +638,28 @@ module load_store_unit
     .flush_i                   (flush_i),
     .ptw_store_enable_i        (mptw_store_en_int),
     .spa_i                     (cva6_mmu_paddr),
-    .addr_store_valid_i        (mptw_store_en_int),
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    //.addr_store_valid_i        (mptw_store_en_int),
+    .addr_store_valid_i        (st_valid),
     .mmpt_store_reg_i          (mmpt_i),
     .store_access_page_fault_o (store_access_page_fault_int),
     .store_format_error_o      (store_format_error_int),
@@ -648,7 +669,15 @@ module load_store_unit
     .allow_store_o             (mptw_store_allow_int),
     // MPTW of the Load Unit
     .ptw_load_enable_i         (mptw_load_en_int),
-    .addr_load_valid_i         (mptw_load_en_int),
+
+
+
+
+
+
+
+    //.addr_load_valid_i         (mptw_load_en_int),
+    .addr_load_valid_i         (ld_valid),
     .mmpt_load_reg_i           (mmpt_i),
     .load_access_page_fault_o  (load_access_page_fault_int),
     .load_format_error_o       (load_format_error_int),

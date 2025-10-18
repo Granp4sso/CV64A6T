@@ -30,6 +30,8 @@ SECTIONS
   . = ALIGN(0x1000);
   .text.startup : { *(.text.startup) }
   . = ALIGN(0x1000); 
+  .s_text : { *(.s_text) }
+  . = ALIGN(0x1000);
   _end_text = .;
   . = ALIGN(0x1000);
   .rodata : { *(.rodata*)}
@@ -45,7 +47,10 @@ SECTIONS
     *(.srodata.cst16) *(.srodata.cst8) *(.srodata.cst4) *(.srodata.cst2) *(.srodata*)
     *(.sdata .sdata.* .gnu.linkonce.s.*)
   }
-
+  /*
+  . = 0x81000000;
+  .mpt_table : { *(.mpt_table) }
+*/
   /* bss segment */
 /*  .sbss : {
     *(.sbss .sbss.* .gnu.linkonce.sb.*)

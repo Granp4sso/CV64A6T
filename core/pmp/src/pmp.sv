@@ -65,6 +65,7 @@ module pmp
       if (i == CVA6Cfg.NrPMPEntries) begin  // no PMP entry matched the address
         // allow all accesses from M-mode for no pmp match
         if (priv_lvl_i == riscv::PRIV_LVL_M) allow_o = 1'b1;
+        //if (priv_lvl_i == riscv::PRIV_LVL_M || priv_lvl_i == riscv::PRIV_LVL_S) allow_o = 1'b1;
         // disallow accesses for all other modes
         else
           allow_o = 1'b0;
