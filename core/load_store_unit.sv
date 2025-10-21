@@ -16,6 +16,7 @@
 module load_store_unit
   import ariane_pkg::*;
 #(
+    parameter int NumPorts = 6,
     parameter config_pkg::cva6_cfg_t CVA6Cfg = config_pkg::cva6_cfg_empty,
     parameter type dcache_req_i_t = logic,
     parameter type dcache_req_o_t = logic,
@@ -143,9 +144,9 @@ module load_store_unit
     output logic                                      dtlb_miss_o,
 
     // Data cache request output - CACHES
-    input  dcache_req_o_t [3:0] dcache_req_ports_i,  // response from D$
+    input  dcache_req_o_t [NumPorts-2:0] dcache_req_ports_i,  // response from D$
     // Data cache request input - CACHES             
-    output dcache_req_i_t [3:0] dcache_req_ports_o,  // request to D$
+    output dcache_req_i_t [NumPorts-2:0] dcache_req_ports_o,  // request to D$
     // TO_BE_COMPLETED - TO_BE_COMPLETED
     input  logic                dcache_wbuffer_empty_i,
     // TO_BE_COMPLETED - TO_BE_COMPLETED
@@ -258,6 +259,10 @@ module load_store_unit
   logic mptw_store_en_int, mptw_store_allow_int, mptw_store_valid_int, mptw_store_busy_int, store_access_page_fault_int;
   logic [2:0] store_format_error_int;
   logic [72:0] plb_entry_store_int;
+  // Internal signals used by MPTW of the IF Unit
+  logic mptw_if_en_int, mptw_if_allow_int, mptw_if_valid_int, mptw_if_busy_int, if_access_page_fault_int;
+  logic [2:0] if_format_error_int;
+  logic [72:0] plb_entry_if_int;
 
   // -------------------
   // MMU e.g.: TLBs/PTW
@@ -587,7 +592,7 @@ module load_store_unit
       .dcache_wbuffer_not_ni_i
   );
 
-  // Selects the source of D$ port 1 requests: either the MPTW of the Load Unit,
+  // Selects the source of D$ port 1 requests: either the MPTW of the Load Unit or Load Unit
   // depending on whether the MPTW is currently handling a request.
   always_comb begin : mux_mptw_load_req
     dcache_req_ports_o[1] = '{default: '0};
@@ -597,68 +602,92 @@ module load_store_unit
     if (mptw_load_en_int) begin
       mptw_load_dcache_req_i = dcache_req_ports_i[1];
       dcache_req_ports_o[1] = mptw_load_dcache_req_o;
-    end else begin
-      
+    end else begin  
       load_dcache_req_i = dcache_req_ports_i[1];
       dcache_req_ports_o[1] = load_dcache_req_o;
-     end
+    end
+  end
+
+  // virtual address causing the exception
+  logic [CVA6Cfg.XLEN-1:0] fetch_vaddr_xlen;
+  icache_areq_t icache_areq_o_int;
+
+  // For exception tval reporting, use the virtual address and resize it
+  if (CVA6Cfg.VLEN >= CVA6Cfg.XLEN) begin
+    assign fetch_vaddr_xlen = icache_areq_i.fetch_vaddr[CVA6Cfg.XLEN-1:0];
+  end else begin
+    assign fetch_vaddr_xlen = CVA6Cfg.XLEN'(icache_areq_i.fetch_vaddr);
+  end
+  
+  // Activate mptw_ifu logic
+  always_comb begin : activate_mptw_ifu
+  icache_areq_o.fetch_valid = 1'b0;
+  mptw_if_en_int = 1'b0; 
+    if (icache_areq_o_int.fetch_valid) begin
+      if (priv_lvl_i == riscv::PRIV_LVL_M || !CVA6Cfg.SMMPT) begin
+        // Skip MPT check in Machine Mode: directly issue cache request
+        icache_areq_o = icache_areq_o_int;
+      end else begin
+        // Enable MPT and wait until valid signal is asserted
+        mptw_if_en_int = 1'b1;
+        if (mptw_if_valid_int) begin
+          mptw_if_en_int = 1'b0;
+          // Check MPT permissions
+          if (mptw_if_allow_int) begin
+            // MPT allow access: issue cache request
+            icache_areq_o = icache_areq_o_int;
+          end else begin
+            icache_areq_o.fetch_valid = 1'b1;
+            // MPT doesn't allow access: throw an `Instruction Access Fault`
+            icache_areq_o.fetch_exception.cause = riscv::INSTR_ACCESS_FAULT;
+            icache_areq_o.fetch_exception.valid = 1'b1;
+            // For exception, the virtual address is required for tval, if no MMU is
+            // instantiated then it will be equal to physical address
+            if (CVA6Cfg.TvalEn) begin
+              icache_areq_o.fetch_exception.tval = fetch_vaddr_xlen;
+            end
+              icache_areq_o.fetch_exception.tval2 = '0;
+              icache_areq_o.fetch_exception.tinst = '0;
+              icache_areq_o.fetch_exception.gva   = v_i;
+          end 
+        end
+      end
+    end
   end
 
   // -----------------
   // MPU unit containing PMP, MPTWs and MEM_to_DCACHE protocol converters
   // -----------------
   mpu_data_if #(
-    .CVA6Cfg              (CVA6Cfg),
-    .icache_areq_t        (icache_areq_t),
-    .exception_t          (exception_t),
-    .dcache_req_i_t       (dcache_req_i_t),
-    .dcache_req_o_t       (dcache_req_o_t)
+    .CVA6Cfg                   (CVA6Cfg),
+    .icache_areq_t             (icache_areq_t),
+    .exception_t               (exception_t),
+    .dcache_req_i_t            (dcache_req_i_t),
+    .dcache_req_o_t            (dcache_req_o_t)
   ) i_mpu_data_if (
-    .clk_i               (clk_i),
-    .rst_ni              (rst_ni),
+    .clk_i                     (clk_i),
+    .rst_ni                    (rst_ni),
     // PMP
-    .icache_areq_i       (pmp_icache_areq_i),
-    .icache_areq_o       (icache_areq_o),
-    .icache_fetch_vaddr_i(icache_areq_i.fetch_vaddr),
-    .lsu_valid_i         (pmp_translation_valid),
-    .lsu_paddr_i         (lsu_paddr),
-    .lsu_vaddr_i         (mmu_vaddr),
-    .lsu_exception_i     (pmp_exception),
-    .lsu_is_store_i      (st_translation_req),
-    .lsu_valid_o         (translation_valid),
-    .lsu_paddr_o         (mmu_paddr),
-    .lsu_exception_o     (mmu_exception),
-    .priv_lvl_i          (priv_lvl_i),
-    .v_i                 (v_i),
-    .ld_st_priv_lvl_i    (ld_st_priv_lvl_i),
-    .ld_st_v_i           (ld_st_v_i),
-    .pmpcfg_i            (pmpcfg_i),
-    .pmpaddr_i           (pmpaddr_i),
+    .icache_areq_i             (pmp_icache_areq_i),
+    .icache_areq_o             (icache_areq_o_int),
+    .icache_fetch_vaddr_i      (icache_areq_i.fetch_vaddr),
+    .lsu_valid_i               (pmp_translation_valid),
+    .lsu_paddr_i               (lsu_paddr),
+    .lsu_vaddr_i               (mmu_vaddr),
+    .lsu_exception_i           (pmp_exception),
+    .lsu_is_store_i            (st_translation_req),
+    .lsu_valid_o               (translation_valid),
+    .lsu_paddr_o               (mmu_paddr),
+    .lsu_exception_o           (mmu_exception),
+    .priv_lvl_i                (priv_lvl_i),
+    .v_i                       (v_i),
+    .ld_st_priv_lvl_i          (ld_st_priv_lvl_i),
+    .ld_st_v_i                 (ld_st_v_i),
+    .pmpcfg_i                  (pmpcfg_i),
+    .pmpaddr_i                 (pmpaddr_i),
     // MPTW of the Store Unit
     .flush_i                   (flush_i),
     .ptw_store_enable_i        (mptw_store_en_int),
-    .spa_i                     (cva6_mmu_paddr),
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    //.addr_store_valid_i        (mptw_store_en_int),
     .addr_store_valid_i        (st_valid),
     .mmpt_store_reg_i          (mmpt_i),
     .store_access_page_fault_o (store_access_page_fault_int),
@@ -669,14 +698,6 @@ module load_store_unit
     .allow_store_o             (mptw_store_allow_int),
     // MPTW of the Load Unit
     .ptw_load_enable_i         (mptw_load_en_int),
-
-
-
-
-
-
-
-    //.addr_load_valid_i         (mptw_load_en_int),
     .addr_load_valid_i         (ld_valid),
     .mmpt_load_reg_i           (mmpt_i),
     .load_access_page_fault_o  (load_access_page_fault_int),
@@ -685,6 +706,19 @@ module load_store_unit
     .ptw_load_valid_o          (mptw_load_valid_int),                  
     .plb_entry_load_o          (plb_entry_load_int),            
     .allow_load_o              (mptw_load_allow_int),
+    // MPTW of the IF Unit
+    .ptw_ifu_enable_i          (mptw_if_en_int), 
+    .addr_ifu_valid_i          (pmp_icache_areq_i.fetch_valid),      
+    .mmpt_ifu_reg_i            (mmpt_i),
+    .ifu_access_page_fault_o   (if_access_page_fault_int),
+    .ifu_format_error_o        (if_format_error_int),
+    .ptw_ifu_busy_o            (mptw_if_busy_int),                   
+    .ptw_ifu_valid_o           (mptw_if_valid_int),                  
+    .plb_entry_ifu_o           (plb_entry_if_int),            
+    .allow_ifu_o               (mptw_if_allow_int),
+    // Dcache port
+    .req_port_i_mptw_if         (dcache_req_ports_i[4]),
+    .req_port_o_mptw_if         (dcache_req_ports_o[4]),
     .req_port_i_mptw_load       (mptw_load_dcache_req_i),
     .req_port_o_mptw_load       (mptw_load_dcache_req_o),
     .req_port_i_mptw_store      (dcache_req_ports_i[3]),
