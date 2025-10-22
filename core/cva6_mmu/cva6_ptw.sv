@@ -82,6 +82,12 @@ module cva6_ptw
     // Performance counters
     output logic shared_tlb_miss_o,
 
+    // MPT
+    input riscv::priv_lvl_t priv_lvl_i,
+    input logic mptw_allow_i,
+    input logic mptw_valid_i,
+    output logic mptw_enable_o,
+
     // PMP
     input riscv::pmpcfg_t [avoid_neg(CVA6Cfg.NrPMPEntries-1):0] pmpcfg_i,
     input logic [avoid_neg(CVA6Cfg.NrPMPEntries-1):0][CVA6Cfg.PLEN-3:0] pmpaddr_i,
@@ -98,14 +104,16 @@ module cva6_ptw
   pte_cva6_t gpte_q, gpte_d;
   assign pte = pte_cva6_t'(data_rdata_q);
 
-  enum logic [2:0] {
+  enum logic [3:0] {
     IDLE,
     WAIT_GRANT,
     PTE_LOOKUP,
     WAIT_RVALID,
     PROPAGATE_ERROR,
     PROPAGATE_ACCESS_ERROR,
-    LATENCY
+    LATENCY,
+    WAIT_MPT,
+    MPT_EXCEPTION
   }
       state_q, state_d;
 
@@ -370,7 +378,8 @@ module cva6_ptw
 
           is_instr_ptw_n    = itlb_req_i;
           vaddr_n           = shared_tlb_vaddr_i;
-          state_d           = WAIT_GRANT;
+          //state_d           = WAIT_GRANT;
+          state_d           = WAIT_MPT;
           shared_tlb_miss_o = 1'b1;
 
           if (itlb_req_i) begin
@@ -379,6 +388,27 @@ module cva6_ptw
           end else begin
             tlb_update_asid_n = ld_st_v_i ? vs_asid_i : asid_i;
             if (CVA6Cfg.RVH) tlb_update_vmid_n = vmid_i;
+          end
+        end
+      end
+
+      WAIT_MPT : begin
+        if (priv_lvl_i == riscv::PRIV_LVL_M || !CVA6Cfg.SMMPT) begin
+          // Skip MPT check in Machine Mode: directly issue memory request
+          state_d = WAIT_GRANT;
+        end else begin 
+          // User/Supervisor Mode: wait for MPT to respond
+          mptw_enable_o = 1'b1;
+          if (mptw_valid_i) begin
+            mptw_enable_o = 1'b0;
+            // Check if this access was actually allowed from a MPT perspective
+            if (mptw_allow_i) begin
+              // send a request out
+              state_d = WAIT_GRANT;
+            end else begin
+               // MPT access exception occured
+              state_d = MPT_EXCEPTION;
+            end
           end
         end
       end
@@ -418,7 +448,8 @@ module cva6_ptw
                 case (ptw_stage_q)
                   S_STAGE: begin
                     if ((is_instr_ptw_q && enable_g_translation_i) || (!is_instr_ptw_q && en_ld_st_g_translation_i)) begin
-                      state_d = WAIT_GRANT;
+                      //state_d = WAIT_GRANT;
+                      state_d = WAIT_MPT;
                       ptw_stage_d = G_FINAL_STAGE;
                       if (CVA6Cfg.RVH) gpte_d = pte;
                       ptw_lvl_n[HYP_EXT] = ptw_lvl_q[0];
@@ -432,7 +463,8 @@ module cva6_ptw
                     end
                   end
                   G_INTERMED_STAGE: begin
-                    state_d = WAIT_GRANT;
+                    // state_d = WAIT_GRANT;
+                    state_d = WAIT_MPT;
                     ptw_stage_d = S_STAGE;
                     ptw_lvl_n[0] = ptw_lvl_q[HYP_EXT];
                     pptr = {pte.ppn[CVA6Cfg.GPPNW-1:0], gptw_pptr_q[11:0]};
@@ -510,7 +542,8 @@ module cva6_ptw
 
               end else begin
                 ptw_lvl_n[0] = ptw_lvl_q[0] + 1'b1;
-                state_d = WAIT_GRANT;
+                //state_d = WAIT_GRANT;
+                state_d = WAIT_MPT;
 
                 if (CVA6Cfg.RVH) begin
                   case (ptw_stage_q)
@@ -584,6 +617,12 @@ module cva6_ptw
         state_d = LATENCY;
         ptw_access_exception_o = 1'b1;
       end
+
+      MPT_EXCEPTION : begin
+        state_d = LATENCY;
+        ptw_access_exception_o = 1'b1;
+      end
+
       // wait for the rvalid before going back to IDLE
       WAIT_RVALID: begin
         if (data_rvalid_q) state_d = IDLE;

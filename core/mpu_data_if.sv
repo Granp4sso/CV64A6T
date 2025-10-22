@@ -73,6 +73,18 @@ module mpu_data_if
         output plb_entry_t plb_entry_ifu_o,            
         output logic allow_ifu_o,
 
+        // MPTW of the Page Table Walker
+        input spa_t_u ptw_spa_i,
+        input logic ptw_ptw_enable_i, 
+        input logic addr_ptw_valid_i,      
+        input mmpt_reg_t mmpt_ptw_reg_i,
+        output logic ptw_access_page_fault_o,
+        output page_format_fault_e ptw_format_error_o,
+        output logic ptw_ptw_busy_o,                   
+        output logic ptw_ptw_valid_o,                  
+        output plb_entry_t plb_entry_ptw_o,            
+        output logic allow_ptw_o,
+
         // Data cache request output - CACHE
         input dcache_req_o_t req_port_i_mptw_load,      // response from D$
         // Data cache request in - CACHE
@@ -86,12 +98,18 @@ module mpu_data_if
         // Data cache request output - CACHE
         input dcache_req_o_t req_port_i_mptw_store,     // response from D$
         // Data cache request in - CACHE
-        output dcache_req_i_t req_port_o_mptw_store     // request to D$ 
+        output dcache_req_i_t req_port_o_mptw_store,    // request to D$ 
+
+        // Data cache request output - CACHE
+        input dcache_req_o_t req_port_i_mptw_ptw,     // response from D$
+        // Data cache request in - CACHE
+        output dcache_req_i_t req_port_o_mptw_ptw     // request to D$ 
     );
 
     `DECLARE_MEM_BUS(m_load,CVA6Cfg.CVA6ConfigXlen);
     `DECLARE_MEM_BUS(m_store, CVA6Cfg.CVA6ConfigXlen);
     `DECLARE_MEM_BUS(m_if, CVA6Cfg.CVA6ConfigXlen);
+    `DECLARE_MEM_BUS(m_ptw, CVA6Cfg.CVA6ConfigXlen);
 
 generate
   if (CVA6Cfg.SMMPT) begin : gen_mptw_load
@@ -284,6 +302,71 @@ generate
         assign ptw_ifu_valid_o = 1'b0;
         assign plb_entry_ifu_o = 72'b0;
         assign allow_ifu_o = 1'b0;
+    end
+
+    if(CVA6Cfg.SMMPT) begin : gen_mptw_ptw
+        // ------------------
+        // MPT used by PTW
+        // ------------------
+        mpt_top # (
+        ) i_mptw_ptw (
+            .clk_i,
+            .rst_ni,
+            .flush_i,
+            .ptw_enable_i           (ptw_ptw_enable_i),
+            .spa_i                  (ptw_spa_i),    
+            .addr_valid_i           (addr_ptw_valid_i),
+            .mmpt_reg_i             (mmpt_ptw_reg_i),
+            .access_type_i          (riscv::ACCESS_READ),
+            .m_mem_req              (m_ptw_mem_req),
+            .m_mem_gnt              (m_ptw_mem_gnt),
+            .m_mem_valid            (m_ptw_mem_valid),
+            .m_mem_addr             (m_ptw_mem_addr),
+            .m_mem_rdata            (m_ptw_mem_rdata),
+            .m_mem_wdata            (m_ptw_mem_wdata),
+            .m_mem_we               (m_ptw_mem_we),
+            .m_mem_be               (m_ptw_mem_be),
+            .m_mem_error            (m_ptw_mem_error),
+            .access_page_fault_o    (ptw_access_page_fault_o),          
+            .format_error_o         (ptw_format_error_o),          
+            .ptw_busy_o             (ptw_ptw_busy_o),
+            .ptw_valid_o            (ptw_ptw_valid_o),
+            .plb_entry_o            (plb_entry_ptw_o),          
+            .allow_o                (allow_ptw_o)
+        );
+
+    // ------------------
+    // MEM to DCACHE protocol converter for MPTW of the Page Table Walker
+    // ------------------
+    mem_to_dcache_converter #(
+        .CVA6Cfg                (CVA6Cfg),
+        .dcache_req_i_t         (dcache_req_i_t),
+        .dcache_req_o_t         (dcache_req_o_t)
+    ) i_mem_dcache_adp_ptw(
+        .clk_i,
+        .rst_ni,
+        .s_mem_req              (m_ptw_mem_req),
+        .s_mem_gnt              (m_ptw_mem_gnt),
+        .s_mem_valid            (m_ptw_mem_valid),
+        .s_mem_addr             (m_ptw_mem_addr),
+        .s_mem_rdata            (m_ptw_mem_rdata),
+        .s_mem_wdata            (m_ptw_mem_wdata),
+        .s_mem_we               (m_ptw_mem_we),
+        .s_mem_be               (m_ptw_mem_be),
+        .s_mem_error            (m_ptw_mem_error),
+        .req_port_i             (req_port_i_mptw_ptw),
+        .req_port_o             (req_port_o_mptw_ptw)
+    );
+
+    end else begin
+
+        assign ptw_access_page_fault_o = 1'b0;
+        assign ptw_format_error_o = NO_ERROR;
+        assign ptw_ptw_busy_o = 1'b0;
+        assign ptw_ptw_valid_o = 1'b0;
+        assign plb_entry_ptw_o = 72'b0;
+        assign allow_ptw_o = 1'b0;
+
     end
 
 endgenerate
