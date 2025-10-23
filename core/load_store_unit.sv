@@ -621,14 +621,14 @@ module load_store_unit
   end
 
   // Selects the source of D$ port 0 requests: either the MPTW of the PTW or PTW
-  // depending on whether the MPTW is currently handling a request.
+  // depending on whether the MPTW is currently handling a request
   always_comb begin : mux_mptw_ptw_req
     dcache_req_ports_o[0] = '{default: '0};
     mptw_ptw_dcache_req_i = '{default: '0};
     ptw_dcache_req_i     = '{default: '0};
 
-    if (mptw_load_en_int) begin
-      mptw_ptw_dcache_req_i = dcache_req_ports_i[1];
+    if (mptw_ptw_en_int) begin
+      mptw_ptw_dcache_req_i = dcache_req_ports_i[0];
       dcache_req_ports_o[0] = mptw_ptw_dcache_req_o;
     end else begin  
       ptw_dcache_req_i = dcache_req_ports_i[0];
@@ -746,8 +746,8 @@ module load_store_unit
     .allow_ifu_o               (mptw_if_allow_int),
     // MPTW of the PTW
     .ptw_ptw_enable_i          (mptw_ptw_en_int),
-    .ptw_spa_i                 ({mptw_ptw_dcache_req_o.address_index, mptw_ptw_dcache_req_o.address_tag}),
-    .addr_ptw_valid_i          (mptw_ptw_dcache_req_o.tag_valid),
+    .ptw_spa_i                 ({ptw_dcache_req_o.address_tag, ptw_dcache_req_o.address_index}),
+    .addr_ptw_valid_i          (mptw_ptw_en_int),
     .mmpt_ptw_reg_i            (mmpt_i),
     .ptw_access_page_fault_o   (ptw_access_page_fault_int),
     .ptw_format_error_o        (ptw_format_error_int),

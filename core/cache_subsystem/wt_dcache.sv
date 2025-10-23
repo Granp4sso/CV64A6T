@@ -185,18 +185,17 @@ module wt_dcache
   );
 
   ///////////////////////////////////////////////////////
-  // read controllers (LD unit and PTW/MMU)
+  // read controllers (LD unit, PTW/MMU, MPTW of Store Unit and MPTW of IF Unit)
   ///////////////////////////////////////////////////////
 
   // 0 is used by MMU or implicit read by zcmt 
   // 1 by READ access requests 
   // 2 by accelerator
-  // 3 by READ acess requests from MPT used by store unit
-  // 4 by READ acess requests from MPT used by IF unit
+  // 3 by READ acess requests from MPTW used by Store Unit
+  // 4 by READ acess requests from MPTW used by IF Unit
   for (genvar k = 0; k < NumPorts - 1; k++) begin : gen_rd_ports
     // set these to high prio ports
     if ((k == 0 && (CVA6Cfg.MmuPresent || CVA6Cfg.RVZCMT )) || (k == 1) || (k == 2 && CVA6Cfg.EnableAccelerator) || (k==3) || (k==4)) begin
-      assign rd_prio[k] = 1'b1;
       wt_dcache_ctrl #(
           .CVA6Cfg(CVA6Cfg),
           .DCACHE_CL_IDX_WIDTH(DCACHE_CL_IDX_WIDTH),
@@ -256,6 +255,11 @@ module wt_dcache
       assign rd_tag_only[k] = 1'b0;
     end
   end
+
+  assign rd_prio[0] = 1'b1; // Assign higher priority to PTW
+  assign rd_prio[1] = 1'b1; // Assign higher priority to Load Unit
+  assign rd_prio[3] = 1'b0; // Assign lower priority to MPTW of Store Unit 
+  assign rd_prio[4] = 1'b1; // Assign higher priority to MPTW of IF Unit
 
   ///////////////////////////////////////////////////////
   // store unit controller

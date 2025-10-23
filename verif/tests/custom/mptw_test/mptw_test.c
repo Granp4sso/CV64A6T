@@ -114,7 +114,7 @@ int main() {
         : "r"(write_val)
         : "memory"
     );
-/*
+
     // Write satp register to enable virtual memory
     __asm__ volatile (
         "csrw satp, %0"
@@ -124,7 +124,7 @@ int main() {
 
     uint64_t *page_table_entry1 = (uint64_t *)0x80008010; // Address of the first page table entry
     *page_table_entry1 = 0b100000000000000000000011101111ULL; // Value of the first page table entry
-*/
+
     jump_to_s();  // jump to S-mode
     return 0;
 }
