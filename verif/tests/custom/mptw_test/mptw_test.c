@@ -1,7 +1,7 @@
 /*
  Author: Valerio Di Domenico <valerio.didomenico@unina.it>
  Description:
-   This code is used to test MPTWs.
+   This code is used to test MPTWs of PTW, Load Unit, Store Unit and IF Unit.
 */
 
 
@@ -68,13 +68,13 @@ int main() {
 
     uint64_t *mpt_entry1 = (uint64_t *)0x81000000;
 
-/*
+/*  //******************* Test case 1 *********************************
     //******************* 1-walking level *****************************
     
     // Leaf-entry --> access allowed
-    *mpt_entry1 = 0x03FFFFFFFFFFFC03ULL;
+    *mpt_entry1 = 0x3FFFFFFFFFFFC03ULL;
 */
-/*
+/*  //******************* Test case 2 *********************************
     //******************* 2-walking levels *****************************
 
     // Non-leaf entry
@@ -83,7 +83,8 @@ int main() {
     uint64_t *mpt_entry2 = (uint64_t *)0x90000000;
     *mpt_entry2 = 0x3FFFFFFFFFFFC03ULL;
  */
-    //******************* 3-walking levels *****************************
+    //******************* Test case 3 *********************************
+    //******************* 4-walking levels *****************************
 
     // Non-leaf entry
     *mpt_entry1 = 0x0000000024000001ULL;
@@ -94,8 +95,8 @@ int main() {
     uint64_t *mpt_entry3 = (uint64_t *)0x90000200;
     *mpt_entry3 = 0x3FFFFFFFFFFFC03ULL;
 
-/*
-    //******************* 3-walking levels with error *******************
+/*  //******************* Test case 4 ********************************* 
+    //******************* 4-walking levels with error *******************
 
     // Non-leaf entry
     *mpt_entry1 = 0x0000000024000001ULL;

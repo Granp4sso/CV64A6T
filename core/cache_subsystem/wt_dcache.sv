@@ -259,7 +259,7 @@ module wt_dcache
   assign rd_prio[0] = 1'b1; // Assign higher priority to PTW
   assign rd_prio[1] = 1'b1; // Assign higher priority to Load Unit
   assign rd_prio[3] = 1'b0; // Assign lower priority to MPTW of Store Unit 
-  assign rd_prio[4] = 1'b1; // Assign higher priority to MPTW of IF Unit
+  assign rd_prio[4] = 1'b0; // Assign lower priority to MPTW of IF Unit
 
   ///////////////////////////////////////////////////////
   // store unit controller
