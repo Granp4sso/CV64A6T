@@ -378,7 +378,6 @@ module cva6_ptw
 
           is_instr_ptw_n    = itlb_req_i;
           vaddr_n           = shared_tlb_vaddr_i;
-          //state_d           = WAIT_GRANT;
           state_d           = WAIT_MPT;
           shared_tlb_miss_o = 1'b1;
 
@@ -448,7 +447,6 @@ module cva6_ptw
                 case (ptw_stage_q)
                   S_STAGE: begin
                     if ((is_instr_ptw_q && enable_g_translation_i) || (!is_instr_ptw_q && en_ld_st_g_translation_i)) begin
-                      //state_d = WAIT_GRANT;
                       state_d = WAIT_MPT;
                       ptw_stage_d = G_FINAL_STAGE;
                       if (CVA6Cfg.RVH) gpte_d = pte;
@@ -463,7 +461,6 @@ module cva6_ptw
                     end
                   end
                   G_INTERMED_STAGE: begin
-                    // state_d = WAIT_GRANT;
                     state_d = WAIT_MPT;
                     ptw_stage_d = S_STAGE;
                     ptw_lvl_n[0] = ptw_lvl_q[HYP_EXT];
@@ -542,7 +539,6 @@ module cva6_ptw
 
               end else begin
                 ptw_lvl_n[0] = ptw_lvl_q[0] + 1'b1;
-                //state_d = WAIT_GRANT;
                 state_d = WAIT_MPT;
 
                 if (CVA6Cfg.RVH) begin
