@@ -98,6 +98,11 @@ module cva6_mmu
     input dcache_req_o_t req_port_i,
     output dcache_req_i_t req_port_o,
 
+    // MPT
+    input logic mptw_allow_i,
+    input logic mptw_valid_i,
+    output logic mptw_enable_o,
+
     // PMP
 
     input riscv::pmpcfg_t [avoid_neg(CVA6Cfg.NrPMPEntries-1):0]                   pmpcfg_i,
@@ -344,6 +349,12 @@ module cva6_mmu
 
       // Performance counters
       .shared_tlb_miss_o(shared_tlb_miss),  //open for now
+
+      // MPT
+      .priv_lvl_i (priv_lvl_i),
+      .mptw_allow_i (mptw_allow_i),
+      .mptw_valid_i (mptw_valid_i),
+      .mptw_enable_o (mptw_enable_o),
 
       // PMP
       .pmpcfg_i   (pmpcfg_i),

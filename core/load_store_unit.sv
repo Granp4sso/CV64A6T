@@ -249,6 +249,10 @@ module load_store_unit
   // New dcache internal signals used by Load Unit, Store Unit, MPTW of the Load Unit and MPTW of the Store Unit
   dcache_req_o_t mptw_load_dcache_req_i;             
   dcache_req_i_t mptw_load_dcache_req_o;
+  dcache_req_o_t mptw_ptw_dcache_req_i;             
+  dcache_req_i_t mptw_ptw_dcache_req_o;
+  dcache_req_o_t ptw_dcache_req_i;             
+  dcache_req_i_t ptw_dcache_req_o;
   dcache_req_o_t load_dcache_req_i;             
   dcache_req_i_t load_dcache_req_o;
   // Internal signals used by MPTW of the Load Unit
@@ -263,6 +267,10 @@ module load_store_unit
   logic mptw_if_en_int, mptw_if_allow_int, mptw_if_valid_int, mptw_if_busy_int, if_access_page_fault_int;
   logic [2:0] if_format_error_int;
   logic [72:0] plb_entry_if_int;
+  // Internal signals used by MPTW of the IF Unit
+  logic mptw_ptw_en_int, mptw_ptw_allow_int, mptw_ptw_valid_int, mptw_ptw_busy_int, ptw_access_page_fault_int;
+  logic [2:0] ptw_format_error_int;
+  logic [72:0] plb_entry_ptw_int;
 
   // -------------------
   // MMU e.g.: TLBs/PTW
@@ -333,8 +341,12 @@ module load_store_unit
         .itlb_miss_o(itlb_miss_o),
         .dtlb_miss_o(dtlb_miss_o),
 
-        .req_port_i(dcache_req_ports_i[0]),
-        .req_port_o(dcache_req_ports_o[0]),
+        .req_port_i(ptw_dcache_req_i),
+        .req_port_o(ptw_dcache_req_o),
+
+        .mptw_allow_i (mptw_ptw_allow_int),
+        .mptw_valid_i (mptw_ptw_valid_int),
+        .mptw_enable_o (mptw_ptw_en_int),
 
         .pmpcfg_i,
         .pmpaddr_i
@@ -608,6 +620,22 @@ module load_store_unit
     end
   end
 
+  // Selects the source of D$ port 0 requests: either the MPTW of the PTW or PTW
+  // depending on whether the MPTW is currently handling a request
+  always_comb begin : mux_mptw_ptw_req
+    dcache_req_ports_o[0] = '{default: '0};
+    mptw_ptw_dcache_req_i = '{default: '0};
+    ptw_dcache_req_i     = '{default: '0};
+
+    if (mptw_ptw_en_int) begin
+      mptw_ptw_dcache_req_i = dcache_req_ports_i[0];
+      dcache_req_ports_o[0] = mptw_ptw_dcache_req_o;
+    end else begin  
+      ptw_dcache_req_i = dcache_req_ports_i[0];
+      dcache_req_ports_o[0] = ptw_dcache_req_o;
+    end
+  end
+
   // virtual address causing the exception
   logic [CVA6Cfg.XLEN-1:0] fetch_vaddr_xlen;
   icache_areq_t icache_areq_o_int;
@@ -688,7 +716,7 @@ module load_store_unit
     // MPTW of the Store Unit
     .flush_i                   (flush_i),
     .ptw_store_enable_i        (mptw_store_en_int),
-    .addr_store_valid_i        (st_valid),
+    .addr_store_valid_i        (pmp_translation_valid),
     .mmpt_store_reg_i          (mmpt_i),
     .store_access_page_fault_o (store_access_page_fault_int),
     .store_format_error_o      (store_format_error_int),
@@ -698,7 +726,7 @@ module load_store_unit
     .allow_store_o             (mptw_store_allow_int),
     // MPTW of the Load Unit
     .ptw_load_enable_i         (mptw_load_en_int),
-    .addr_load_valid_i         (ld_valid),
+    .addr_load_valid_i         (pmp_translation_valid),
     .mmpt_load_reg_i           (mmpt_i),
     .load_access_page_fault_o  (load_access_page_fault_int),
     .load_format_error_o       (load_format_error_int),
@@ -716,13 +744,27 @@ module load_store_unit
     .ptw_ifu_valid_o           (mptw_if_valid_int),                  
     .plb_entry_ifu_o           (plb_entry_if_int),            
     .allow_ifu_o               (mptw_if_allow_int),
+    // MPTW of the PTW
+    .ptw_ptw_enable_i          (mptw_ptw_en_int),
+    .ptw_spa_i                 ({ptw_dcache_req_o.address_tag, ptw_dcache_req_o.address_index}),
+    .addr_ptw_valid_i          (mptw_ptw_en_int),
+    .mmpt_ptw_reg_i            (mmpt_i),
+    .ptw_access_page_fault_o   (ptw_access_page_fault_int),
+    .ptw_format_error_o        (ptw_format_error_int),
+    .ptw_ptw_busy_o            (mptw_ptw_busy_int),
+    .ptw_ptw_valid_o           (mptw_ptw_valid_int),
+    .plb_entry_ptw_o           (plb_entry_ptw_int),
+    .allow_ptw_o               (mptw_ptw_allow_int),
+
     // Dcache port
     .req_port_i_mptw_if         (dcache_req_ports_i[4]),
     .req_port_o_mptw_if         (dcache_req_ports_o[4]),
     .req_port_i_mptw_load       (mptw_load_dcache_req_i),
     .req_port_o_mptw_load       (mptw_load_dcache_req_o),
     .req_port_i_mptw_store      (dcache_req_ports_i[3]),
-    .req_port_o_mptw_store      (dcache_req_ports_o[3])
+    .req_port_o_mptw_store      (dcache_req_ports_o[3]),
+    .req_port_i_mptw_ptw        (mptw_ptw_dcache_req_i),
+    .req_port_o_mptw_ptw        (mptw_ptw_dcache_req_o)
   );
 
   // ----------------------------
