@@ -8,16 +8,21 @@
 
 #include <stdint.h>
 volatile uint32_t *reg = (uint32_t *)0x80001000; 
-void s_function() __attribute__((section(".s_text")));
-void s_function() {
+//void s_function(void);
+//extern void s_function(void);
+//void s_function() __attribute__((section(".s_text")));
+/*void s_function() {
     volatile int a = 42;  // dummy operations
     a++;
     *reg = 1;             // to_host=1 means stop simulation
     while(1);             // loop 
-}
+}*/
 
-extern void s_function();
+void s_function(void) __attribute__((section(".s_text")));
+extern void s_function(void);
+
 #define S_FUNC_ADDR ((uintptr_t)&s_function)
+#define RVTEST_GOTO_MMODE
 
 void jump_to_s() {
     uintptr_t ms;
@@ -89,14 +94,24 @@ int main() {
     *mpt_entry3 = 0x0000000000000003ULL;
 */
 
-    // Enable MPT via MMPT register
+    // Enable MPT only if hardware supports it
+    #ifdef SPIKE
+    __asm__ volatile (
+        "csrw 0x320, %0"   // mcountinhibit
+        :
+        : "r"(write_val)
+        : "memory"
+    );
+    #else
+    // Real MPT register access (only for verilator / RTL sim)
     __asm__ volatile (
         "csrw 0x7C3, %0"
         :
         : "r"(write_val)
         : "memory"
     );
-
+    #endif
+/*
     // Write satp register to enable virtual memory
     __asm__ volatile (
         "csrw satp, %0"
@@ -106,7 +121,7 @@ int main() {
 
     uint64_t *page_table_entry1 = (uint64_t *)0x80008010; // Address of the first page table entry
     *page_table_entry1 = 0b100000000000000000000011101111ULL; // Value of the first page table entry
-
+*/
     jump_to_s();  // jump to S-mode
     return 0;
 }
