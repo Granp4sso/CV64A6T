@@ -109,12 +109,20 @@ if [ "$RUN_VERI" = true ]; then
     --linker=$LINKER \
     --steps=iss_sim
 
-  # Convert log to CSV
   cd ../../
-  PYTHONPATH=verif/sim/dv/scripts python3 verif/sim/verilator_log_to_trace_csv.py \
-    --log verif/sim/${OUT_DIR}/veri-testharness_sim/mptw_test.cv64a6_imafdch_sv39.log \
-    --csv verif/sim/${OUT_DIR}/veri-testharness_sim/mptw_test.cv64a6_imafdch_sv39.csv
-  cd verif/sim
+
+  # Convert log to CSV
+  LOG_FILE=verif/sim/${OUT_DIR}/veri-testharness_sim/mptw_test.cv64a6_imafdch_sv39.log
+  CSV_FILE=verif/sim/${OUT_DIR}/veri-testharness_sim/mptw_test.cv64a6_imafdch_sv39.csv
+
+  if [ -f "$LOG_FILE" ]; then  
+    PYTHONPATH=verif/sim/dv/scripts python3 verif/sim/verilator_log_to_trace_csv.py \
+      --log "$LOG_FILE" \
+      --csv "$CSV_FILE"
+    cd verif/sim
+  else
+    echo " [ERROR] Verilator log file does not exist: $LOG_FILE"
+  fi
 fi
 
 # ================================================================
@@ -154,13 +162,19 @@ if [ "$RUN_SPIKE" = true ]; then
   cd ../../
 
   # Convert Spike log to CSV
-  PYTHONPATH=verif/sim/dv/scripts python3 verif/sim/cva6_spike_log_to_trace_csv.py \
-    --log verif/sim/${OUT_DIR}/spike_sim/mptw_test.cv64a6_imafdch_sv39.log \
-    --csv verif/sim/${OUT_DIR}/spike_sim/mptw_test.cv64a6_imafdch_sv39.csv
+  LOG_FILE=verif/sim/${OUT_DIR}/spike_sim/mptw_test.cv64a6_imafdch_sv39.log
+  CSV_FILE=verif/sim/${OUT_DIR}/spike_sim/mptw_test.cv64a6_imafdch_sv39.csv
 
-  cd verif/sim
+  if [ -f "$LOG_FILE" ]; then
+    PYTHONPATH=verif/sim/dv/scripts python3 verif/sim/cva6_spike_log_to_trace_csv.py \
+      --log "$LOG_FILE" \
+      --csv "$CSV_FILE"
+  else
+    echo "[ERROR] Spike log file does not exist: $LOG_FILE"
+  fi
 fi
 
+cd verif/sim
 # ================================================================
 # 6. Compare results (if both ran)
 # ================================================================
